@@ -36,9 +36,10 @@ app.post("/api/upload", verifyToken, upload.single("file"), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: "No file uploaded." });
   }
+  const fileUrl = upload.getFileUrl(req.file);
   return res.status(200).json({
     message: "File uploaded successfully.",
-    file_url: `/uploads/${req.file.filename}`,
+    file_url: fileUrl,
   });
 });
 

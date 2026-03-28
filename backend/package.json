@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
-    "migrate": "node scripts/migrate.js"
+    "migrate": "node scripts/migrate.js",
+    "render:postdeploy": "node scripts/migrate.js"
   },
   "keywords": [],
   "author": "",
@@ -14,10 +15,12 @@
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
+    "cloudinary": "^1.41.3",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.1.1",
+    "multer-storage-cloudinary": "^4.0.0",
     "mysql2": "^3.19.1"
   },
   "devDependencies": {

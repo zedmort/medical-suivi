@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const upload = require("../config/multer");
 const { createNotification } = require("./notificationController");
 
 const findPatientUserId = async (patientId) => {
@@ -103,7 +104,7 @@ const createPrescription = async (req, res) => {
     return res.status(400).json({ message: "patient_id and pharmacy_id are required." });
   }
 
-  const file_url = req.file ? `/uploads/${req.file.filename}` : null;
+  const file_url = req.file ? upload.getFileUrl(req.file) : null;
 
   try {
     // Verify patient belongs to this doctor

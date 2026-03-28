@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const upload = require("../config/multer");
 const { createNotification } = require("./notificationController");
 
 const findPatientUserId = async (patientId) => {
@@ -40,7 +41,7 @@ const createRequest = async (req, res) => {
     if (pt.length === 0) return res.status(404).json({ message: "Patient not found." });
     const patient = pt[0];
 
-    const file_url = req.file ? `/uploads/${req.file.filename}` : null;
+    const file_url = req.file ? upload.getFileUrl(req.file) : null;
 
     const [result] = await db.execute(
       `INSERT INTO analysis_requests (doctor_id, patient_id, labo_id, notes, file_url, status) VALUES (?, ?, ?, ?, ?, 'pending')`,
@@ -114,7 +115,7 @@ const uploadResult = async (req, res) => {
     if (rows.length === 0) return res.status(404).json({ message: "Request not found or not assigned to you." });
 
     const row = rows[0];
-    const file_url = `/uploads/${req.file.filename}`;
+    const file_url = upload.getFileUrl(req.file);
 
     await db.execute(`INSERT INTO analysis_results (request_id, file_url) VALUES (?, ?)`, [request_id, file_url]);
     await db.execute(`UPDATE analysis_requests SET status = 'completed' WHERE id = ?`, [request_id]);
