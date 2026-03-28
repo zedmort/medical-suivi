@@ -2,7 +2,9 @@
 set -euo pipefail
 
 if [[ $# -lt 2 ]]; then
-  echo "Usage: $0 <git_repo_url> <domain> [branch]"
+  echo "Usage: $0 <git_repo_url> <domain_or_dash> [branch]"
+  echo "Use '-' if you don't have a domain yet (deploy with public IP)."
+  echo "Example: $0 https://github.com/you/medical-suivi.git - main"
   echo "Example: $0 https://github.com/you/medical-suivi.git api.medigo.duckdns.org main"
   exit 1
 fi
@@ -46,14 +48,24 @@ pm2 start /tmp/ecosystem.config.cjs --only medical-api || pm2 restart medical-ap
 pm2 save
 pm2 startup systemd -u "$USER" --hp "$HOME" >/tmp/pm2-startup.txt || true
 
+SERVER_NAME="$DOMAIN"
+if [[ "$DOMAIN" == "-" ]]; then
+  SERVER_NAME="_"
+fi
+
 sudo cp -f deploy/oracle/nginx-medigo.conf /etc/nginx/sites-available/medigo
-sudo sed -i "s|__DOMAIN__|$DOMAIN|g" /etc/nginx/sites-available/medigo
+sudo sed -i "s|__DOMAIN__|$SERVER_NAME|g" /etc/nginx/sites-available/medigo
 sudo ln -sf /etc/nginx/sites-available/medigo /etc/nginx/sites-enabled/medigo
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl reload nginx
 
 echo "Deployment done."
-echo "Next: configure SSL"
-echo "  sudo apt-get install -y certbot python3-certbot-nginx"
-echo "  sudo certbot --nginx -d $DOMAIN"
+if [[ "$DOMAIN" != "-" ]]; then
+  echo "Next: configure SSL"
+  echo "  sudo apt-get install -y certbot python3-certbot-nginx"
+  echo "  sudo certbot --nginx -d $DOMAIN"
+else
+  echo "Deployed with public IP (no domain)."
+  echo "You can add domain + SSL later and rerun deploy-app.sh with your domain."
+fi

@@ -46,6 +46,11 @@ Example:
 ./backend/deploy/oracle/deploy-app.sh https://github.com/you/medical-suivi.git api-medigo.duckdns.org main
 ```
 
+No domain yet (public IP only):
+```bash
+./backend/deploy/oracle/deploy-app.sh https://github.com/you/medical-suivi.git - main
+```
+
 ## 6) Add backend .env on server
 Create:
 ```bash
@@ -62,7 +67,7 @@ cd /var/www/medical-suivi/project/backend
 npm run migrate
 ```
 
-## 8) HTTPS (free)
+## 8) HTTPS (free, optional if domain exists)
 ```bash
 sudo apt-get install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d <YOUR_DOMAIN>
@@ -70,6 +75,10 @@ sudo certbot --nginx -d <YOUR_DOMAIN>
 
 ## 9) Verify API
 ```bash
+curl http://<VM_PUBLIC_IP>/
+curl http://<VM_PUBLIC_IP>/api/notifications -H "Authorization: Bearer <TOKEN>"
+
+# If domain+SSL configured:
 curl https://<YOUR_DOMAIN>/
 curl https://<YOUR_DOMAIN>/api/notifications -H "Authorization: Bearer <TOKEN>"
 ```
@@ -78,6 +87,11 @@ curl https://<YOUR_DOMAIN>/api/notifications -H "Authorization: Bearer <TOKEN>"
 Use:
 ```bash
 flutter run --dart-define=API_BASE_URL=https://<YOUR_DOMAIN>/api
+```
+
+Without domain/SSL yet:
+```bash
+flutter run --dart-define=API_BASE_URL=http://<VM_PUBLIC_IP>/api
 ```
 
 For release build, keep same value in your CI/build command.
