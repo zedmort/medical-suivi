@@ -11,7 +11,7 @@ const poolConfig = process.env.DATABASE_URL
     };
 
 if (process.env.DB_SSL === "true") {
-  poolConfig.ssl = { rejectUnauthorized: true };
+  poolConfig.ssl = { rejectUnauthorized: false };
 }
 
 poolConfig.waitForConnections = true;
