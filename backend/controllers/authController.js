@@ -88,7 +88,7 @@ const register = async (req, res) => {
           parseInt(age, 10),
           sex,
           disease.toString().trim(),
-          phone || null,
+          phone ? phone.toString().trim() : null,
         ]
       );
     }
@@ -99,7 +99,10 @@ const register = async (req, res) => {
     });
   } catch (err) {
     console.error("Register error:", err);
-    return res.status(500).json({ message: "Server error during registration." });
+    return res.status(500).json({
+      message: `Server error during registration: ${err && err.message ? err.message : "unknown error"}`,
+      error: err && err.code ? err.code : undefined,
+    });
   }
 };
 
@@ -142,7 +145,10 @@ const login = async (req, res) => {
     });
   } catch (err) {
     console.error("Login error:", err);
-    return res.status(500).json({ message: "Server error during login." });
+    return res.status(500).json({
+      message: `Server error during login: ${err && err.message ? err.message : "unknown error"}`,
+      error: err && err.code ? err.code : undefined,
+    });
   }
 };
 
