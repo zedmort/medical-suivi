@@ -8,9 +8,13 @@ const {
 	getPatient,
 	updatePatient,
 	getMyOverview,
+	getDoctorRecommendations,
+	assignTreatingDoctor,
 } = require("../controllers/patientController");
 
 router.get("/me/overview", verifyToken, getMyOverview);
+router.get("/me/doctors", verifyToken, getDoctorRecommendations);
+router.put("/me/doctor", verifyToken, assignTreatingDoctor);
 router.get("/available", verifyToken, getAvailablePatients);
 
 router.post("/",     verifyToken, createPatient);

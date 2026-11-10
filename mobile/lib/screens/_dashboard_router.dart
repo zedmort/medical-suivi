@@ -4,6 +4,7 @@ import 'labo_dashboard.dart';
 import 'pharmacy_dashboard.dart';
 import 'patient_dashboard.dart';
 import 'login_screen.dart';
+import 'admin_dashboard.dart';
 
 /// Helper to navigate to the correct dashboard based on role,
 /// clearing the entire navigation stack.
@@ -23,12 +24,20 @@ class DashboardRouter {
       case 'patient':
         screen = const PatientDashboard();
         break;
+      case 'admin':
+        screen = const AdminDashboard();
+        break;
       default:
         screen = const LoginScreen();
     }
-    Navigator.pushAndRemoveUntil(
+    Navigator.pushAndRemoveUntil<void>(
       context,
-      MaterialPageRoute(builder: (_) => screen),
+      PageRouteBuilder<void>(
+        opaque: true,
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+        pageBuilder: (_, _, _) => screen,
+      ),
       (_) => false,
     );
   }

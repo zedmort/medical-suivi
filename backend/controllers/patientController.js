@@ -1,36 +1,31 @@
 const db = require("../config/db");
-const {
-  isDiseaseAllowedForSpecialty,
-  getDiseasesForSpecialty,
-} = require("../config/medicalTaxonomy");
+const { isDiseaseAllowedForSpecialty, getDiseasesForSpecialty } =
+  require("../config/medicalTaxonomy");
+const { createNotification } = require("./notificationController");
+const { findPatientForUser } = require("../utils/patientIdentity");
 
 const findPatientForLoggedUser = async (user) => {
-  const [byUserId] = await db.execute(
-    `SELECT p.* FROM patients p WHERE p.user_id = ? LIMIT 1`,
-    [user.id]
-  );
-  if (byUserId.length > 0) {
-    return byUserId[0];
-  }
-
+  const identity = await findPatientForUser(user);
+  if (!identity) return null;
   const [rows] = await db.execute(
-    `SELECT p.*
-     FROM patients p
-     WHERE LOWER(TRIM(CONCAT(p.firstname, ' ', p.lastname))) = LOWER(TRIM(?))
-     ORDER BY p.created_at DESC
-     LIMIT 1`,
-    [user.name || ""]
+    "SELECT * FROM patients WHERE id = ? LIMIT 1",
+    [identity.id],
   );
-
   return rows[0] || null;
 };
 
-const getDoctorSpecialty = async (doctorId) => {
+const getDoctorSpecialties = async (doctorId) => {
   const [rows] = await db.execute(
-    `SELECT specialty FROM users WHERE id = ? AND role = 'doctor' LIMIT 1`,
-    [doctorId]
+    `SELECT s.slug
+     FROM doctor_specialties ds
+     JOIN specialties s ON s.id = ds.specialty_id
+     WHERE ds.doctor_id = ?
+     UNION
+     SELECT specialty AS slug FROM users
+     WHERE id = ? AND role = 'doctor' AND specialty IS NOT NULL AND specialty <> ''`,
+    [doctorId, doctorId],
   );
-  return rows[0]?.specialty || null;
+  return rows.map((row) => row.slug);
 };
 
 // GET /api/patients/available — doctor lists unassigned existing patient accounts matching specialty
@@ -40,33 +35,159 @@ const getAvailablePatients = async (req, res) => {
   }
 
   try {
-    const doctorSpecialty = await getDoctorSpecialty(req.user.id);
-    if (!doctorSpecialty) {
-      return res.status(400).json({ message: "Doctor specialty is required before adding patients." });
-    }
-
-    const allowedDiseases = getDiseasesForSpecialty(doctorSpecialty);
-    if (allowedDiseases.length === 0) {
-      return res.status(200).json({ patients: [] });
-    }
-
-    const placeholders = allowedDiseases.map(() => "?").join(", ");
-    const [rows] = await db.execute(
-      `SELECT p.id, p.user_id, p.firstname, p.lastname, p.address, p.age, p.sex, p.disease, p.phone, p.created_at,
-              u.email
-       FROM patients p
-       LEFT JOIN users u ON u.id = p.user_id
-       WHERE p.doctor_id IS NULL
-         AND p.user_id IS NOT NULL
-         AND p.disease IN (${placeholders})
-       ORDER BY p.lastname ASC, p.firstname ASC`,
-      allowedDiseases
+    const [doctor] = await db.execute(
+      "SELECT doctor_type FROM users WHERE id = ? AND role = 'doctor'",
+      [req.user.id],
     );
+    if (!doctor[0]) return res.status(404).json({ message: "Doctor not found." });
+
+    let rows;
+    if (doctor[0].doctor_type === "general_practitioner") {
+      [rows] = await db.execute(
+        `SELECT p.id, p.user_id, p.firstname, p.lastname, p.address, p.age,
+                p.sex, p.disease, p.phone, p.created_at, u.email
+         FROM patients p
+         LEFT JOIN users u ON u.id = p.user_id
+         WHERE p.doctor_id IS NULL AND p.user_id IS NOT NULL
+         ORDER BY p.lastname ASC, p.firstname ASC`,
+      );
+    } else {
+      [rows] = await db.execute(
+        `SELECT DISTINCT p.id, p.user_id, p.firstname, p.lastname, p.address,
+                p.age, p.sex, p.disease, p.phone, p.created_at, u.email
+         FROM patients p
+         JOIN patient_conditions pc ON pc.patient_id = p.id
+         JOIN condition_specialties cs ON cs.condition_id = pc.condition_id
+         JOIN doctor_specialties ds ON ds.specialty_id = cs.specialty_id
+         LEFT JOIN users u ON u.id = p.user_id
+         WHERE p.doctor_id IS NULL AND p.user_id IS NOT NULL AND ds.doctor_id = ?
+         ORDER BY p.lastname ASC, p.firstname ASC`,
+        [req.user.id],
+      );
+    }
 
     return res.status(200).json({ patients: rows });
   } catch (err) {
     console.error("Get available patients error:", err);
     return res.status(500).json({ message: "Server error." });
+  }
+};
+
+const getDoctorRecommendations = async (req, res) => {
+  if (req.user.role !== "patient") {
+    return res.status(403).json({ message: "Only patients can request doctor recommendations." });
+  }
+  try {
+    const [patients] = await db.execute(
+      "SELECT id FROM patients WHERE user_id = ? LIMIT 1",
+      [req.user.id],
+    );
+    if (patients.length === 0) {
+      return res.status(404).json({ message: "Patient profile not found." });
+    }
+
+    const [matches] = await db.execute(
+      `SELECT u.id, u.name, u.doctor_type, u.professional_info,
+              GROUP_CONCAT(DISTINCT s.slug ORDER BY s.slug SEPARATOR ',') AS specialties
+       FROM patient_conditions pc
+       JOIN condition_specialties cs ON cs.condition_id = pc.condition_id
+       JOIN doctor_specialties ds ON ds.specialty_id = cs.specialty_id
+       JOIN users u ON u.id = ds.doctor_id AND u.role = 'doctor'
+       JOIN specialties s ON s.id = ds.specialty_id
+       WHERE pc.patient_id = ?
+       GROUP BY u.id
+       ORDER BY u.name
+       LIMIT 100`,
+      [patients[0].id],
+    );
+
+    let doctors = matches.map((doctor) => ({
+      ...doctor,
+      specialties: doctor.specialties ? doctor.specialties.split(",") : [],
+      recommendation: "condition_match",
+    }));
+    if (doctors.length === 0) {
+      const [generalPractitioners] = await db.execute(
+        `SELECT id, name, doctor_type, professional_info, NULL AS specialties
+         FROM users
+         WHERE role = 'doctor' AND doctor_type = 'general_practitioner'
+         ORDER BY name
+         LIMIT 100`,
+      );
+      doctors = generalPractitioners.map((doctor) => ({
+        ...doctor,
+        specialties: [],
+        recommendation: "general_practitioner",
+      }));
+    }
+    return res.status(200).json({
+      doctors,
+      hasConditionMatch: matches.length > 0,
+    });
+  } catch (err) {
+    console.error("Get doctor recommendations error:", err);
+    return res.status(500).json({ message: "Server error." });
+  }
+};
+
+const assignTreatingDoctor = async (req, res) => {
+  if (req.user.role !== "patient") {
+    return res.status(403).json({ message: "Only patients can choose their treating doctor." });
+  }
+  const doctorId = Number.parseInt(req.body.doctor_id, 10);
+  if (!Number.isInteger(doctorId) || doctorId <= 0) {
+    return res.status(400).json({ message: "A valid doctor_id is required." });
+  }
+
+  const connection = await db.getConnection();
+  let transactionStarted = false;
+  try {
+    await connection.beginTransaction();
+    transactionStarted = true;
+    const [patientRows] = await connection.execute(
+      "SELECT id, doctor_id FROM patients WHERE user_id = ? LIMIT 1 FOR UPDATE",
+      [req.user.id],
+    );
+    if (patientRows.length === 0) {
+      await connection.rollback();
+      transactionStarted = false;
+      return res.status(404).json({ message: "Patient profile not found." });
+    }
+    const [doctors] = await connection.execute(
+      "SELECT id, name FROM users WHERE id = ? AND role = 'doctor' LIMIT 1",
+      [doctorId],
+    );
+    if (doctors.length === 0) {
+      await connection.rollback();
+      transactionStarted = false;
+      return res.status(404).json({ message: "Doctor not found." });
+    }
+
+    const patientId = patientRows[0].id;
+    await connection.execute(
+      "UPDATE patients SET doctor_id = ? WHERE id = ?",
+      [doctorId, patientId],
+    );
+    await connection.commit();
+    transactionStarted = false;
+
+    await createNotification(
+      doctorId,
+      "New patient selected you",
+      "A patient selected you as their treating doctor.",
+      "patient_assignment",
+      patientId,
+    );
+    return res.status(200).json({
+      message: "Treating doctor updated.",
+      doctor: { id: doctorId, name: doctors[0].name },
+    });
+  } catch (err) {
+    if (transactionStarted) await connection.rollback();
+    console.error("Assign treating doctor error:", err);
+    return res.status(500).json({ message: "Server error." });
+  } finally {
+    connection.release();
   }
 };
 
@@ -82,10 +203,11 @@ const createPatient = async (req, res) => {
   }
 
   try {
-    const doctorSpecialty = await getDoctorSpecialty(req.user.id);
-    if (!doctorSpecialty) {
-      return res.status(400).json({ message: "Doctor specialty is required before adding patients." });
-    }
+    const [doctorRows] = await db.execute(
+      "SELECT doctor_type FROM users WHERE id = ? AND role = 'doctor'",
+      [req.user.id],
+    );
+    if (!doctorRows[0]) return res.status(404).json({ message: "Doctor not found." });
 
     const [rows] = await db.execute(
       `SELECT id, doctor_id, user_id, disease
@@ -108,11 +230,21 @@ const createPatient = async (req, res) => {
       return res.status(409).json({ message: "Patient is already assigned to another doctor." });
     }
 
-    if (!isDiseaseAllowedForSpecialty(doctorSpecialty, patient.disease)) {
-      const allowed = getDiseasesForSpecialty(doctorSpecialty);
-      return res.status(400).json({
-        message: `Disease is not allowed for your specialty (${doctorSpecialty}). Allowed diseases: ${allowed.join(", ")}.`,
-      });
+    if (doctorRows[0].doctor_type !== "general_practitioner") {
+      const [matches] = await db.execute(
+        `SELECT 1
+         FROM patient_conditions pc
+         JOIN condition_specialties cs ON cs.condition_id = pc.condition_id
+         JOIN doctor_specialties ds ON ds.specialty_id = cs.specialty_id
+         WHERE pc.patient_id = ? AND ds.doctor_id = ?
+         LIMIT 1`,
+        [patientId, req.user.id],
+      );
+      if (matches.length === 0) {
+        return res.status(400).json({
+          message: "The patient's recorded conditions do not match your specialties.",
+        });
+      }
     }
 
     const [result] = await db.execute(
@@ -182,15 +314,20 @@ const updatePatient = async (req, res) => {
   const { firstname, lastname, address, age, sex, disease, phone, next_analysis_date } = req.body;
 
   try {
-    const doctorSpecialty = await getDoctorSpecialty(req.user.id);
-    if (!doctorSpecialty) {
-      return res.status(400).json({ message: "Doctor specialty is required before updating patients." });
-    }
+    const [doctorRows] = await db.execute(
+      "SELECT doctor_type FROM users WHERE id = ? AND role = 'doctor'",
+      [req.user.id],
+    );
+    if (!doctorRows[0]) return res.status(404).json({ message: "Doctor not found." });
 
-    if (!isDiseaseAllowedForSpecialty(doctorSpecialty, disease)) {
-      const allowed = getDiseasesForSpecialty(doctorSpecialty);
+    const doctorSpecialties = await getDoctorSpecialties(req.user.id);
+    if (
+      doctorRows[0].doctor_type !== "general_practitioner" &&
+      !doctorSpecialties.some((specialty) =>
+        isDiseaseAllowedForSpecialty(specialty, disease))
+    ) {
       return res.status(400).json({
-        message: `Disease is not allowed for your specialty (${doctorSpecialty}). Allowed diseases: ${allowed.join(", ")}.`,
+        message: "The patient's recorded condition does not match your specialties.",
       });
     }
 
@@ -228,9 +365,24 @@ const getMyOverview = async (req, res) => {
     const patient = await findPatientForLoggedUser(req.user);
     if (!patient) {
       return res.status(404).json({
-        message:
-          "Patient profile not linked yet. Ask your doctor to use your exact full name in the patient record.",
+        message: "Patient profile is not linked to this account.",
       });
+    }
+    const [conditionRows] = await db.execute(
+      `SELECT c.name
+       FROM patient_conditions pc
+       JOIN medical_conditions c ON c.id = pc.condition_id
+       WHERE pc.patient_id = ?
+       ORDER BY c.name`,
+      [patient.id],
+    );
+    let treatingDoctor = null;
+    if (patient.doctor_id) {
+      const [doctorRows] = await db.execute(
+        "SELECT id, name FROM users WHERE id = ? AND role = 'doctor'",
+        [patient.doctor_id],
+      );
+      treatingDoctor = doctorRows[0] || null;
     }
 
     const [analyses] = await db.execute(
@@ -298,6 +450,8 @@ const getMyOverview = async (req, res) => {
         firstname: patient.firstname,
         lastname: patient.lastname,
         disease: patient.disease,
+        conditions: conditionRows.map((row) => row.name),
+        doctor: treatingDoctor,
         next_analysis_date: patient.next_analysis_date,
       },
       stats: {
@@ -315,4 +469,13 @@ const getMyOverview = async (req, res) => {
   }
 };
 
-module.exports = { createPatient, getPatients, getAvailablePatients, getPatient, updatePatient, getMyOverview };
+module.exports = {
+  createPatient,
+  getPatients,
+  getAvailablePatients,
+  getPatient,
+  updatePatient,
+  getMyOverview,
+  getDoctorRecommendations,
+  assignTreatingDoctor,
+};

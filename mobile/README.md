@@ -1,16 +1,32 @@
-# mobile
+# MediGo mobile
 
-A new Flutter project.
+## Run on a physical Android device
 
-## Getting Started
+The phone and computer must be connected to the same Wi-Fi network. Start the
+backend from the repository root:
 
-This project is a starting point for a Flutter application.
+```sh
+npm run dev
+```
 
-A few resources to get you started if this is your first Flutter project:
+Then run the app from a second terminal:
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+```sh
+cd mobile
+flutter run
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+The Android app defaults to the computer's current LAN address,
+`http://192.168.100.4:5001/api`; the backend listens on all network interfaces.
+If the computer's address changes, find its Wi-Fi IPv4 address with
+`hostname -I`, then pass it when launching Flutter:
+
+```sh
+cd mobile
+flutter run --dart-define=API_BASE_URL=http://<COMPUTER_LAN_IP>:5001/api
+```
+
+Use the computer's Wi-Fi address, not `127.0.0.1`, `localhost`, or a Docker
+address such as `172.17.x.x`. If the connection still fails, allow inbound TCP
+port 5001 through the computer's firewall. An Android emulator can use
+`http://10.0.2.2:5001/api` instead.

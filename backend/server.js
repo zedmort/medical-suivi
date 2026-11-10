@@ -21,6 +21,10 @@ const patientRoutes      = require("./routes/patients");
 const analysisRoutes     = require("./routes/analysis");
 const prescriptionRoutes = require("./routes/prescriptions");
 const notificationRoutes = require("./routes/notifications");
+const medicalRoutes      = require("./routes/medical");
+const adminRoutes        = require("./routes/admin");
+const advertisementRoutes = require("./routes/advertisements");
+const consultationRoutes = require("./routes/consultations");
 const upload             = require("./config/multer");
 const verifyToken        = require("./middleware/verifyToken");
 
@@ -30,6 +34,10 @@ app.use("/api/patients",      patientRoutes);
 app.use("/api/analysis",      analysisRoutes);
 app.use("/api/prescriptions", prescriptionRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/medical",      medicalRoutes);
+app.use("/api/admin",        adminRoutes);
+app.use("/api/advertisements", advertisementRoutes);
+app.use("/api/consultations", consultationRoutes);
 
 // General file upload endpoint — POST /api/upload
 app.post("/api/upload", verifyToken, upload.single("file"), (req, res) => {
@@ -60,6 +68,7 @@ app.use((err, req, res, next) => {
 });
 
 // ─── Start server ─────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+const HOST = process.env.HOST || "0.0.0.0";
+app.listen(PORT, HOST, () => {
+  console.log(`Server running on http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
 });

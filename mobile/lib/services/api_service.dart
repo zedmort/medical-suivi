@@ -25,18 +25,22 @@ class ApiService {
   /// `flutter run --dart-define=API_BASE_URL=http://<HOST_IP>:5001/api`
   /// Android emulator  → `http://10.0.2.2:5001/api`
   /// iOS simulator     → `http://localhost:5001/api`
-  /// Android USB (adb reverse) → `http://127.0.0.1:5001/api`
+  /// Android device on the same Wi-Fi → `http://192.168.100.4:5001/api`
+  /// Override the LAN address with `--dart-define=API_BASE_URL=...` if it changes.
   static const String _configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: '',
   );
-  static const String _legacyLanBaseUrl = 'http://192.168.1.3:5001/api';
+  static const String _lanBaseUrl = 'http://192.168.100.4:5001/api';
   static String _activeBaseUrl = _initialBaseUrl();
 
   static String get baseUrl => _activeBaseUrl;
 
+  // Disable Android encrypted shared prefs. Those can fail with AEADBadTagException
+  // after app reinstall/keystore mismatch or stale data, which breaks startup before
+  // the app can even reach the API layer.
   static const _storage = FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    aOptions: AndroidOptions(encryptedSharedPreferences: false),
   );
 
   static const _bgTokenKey = 'jwt_token_bg';
@@ -45,10 +49,13 @@ class ApiService {
   static String _initialBaseUrl() {
     final configured = _configuredBaseUrl.trim();
     if (configured.isNotEmpty) return configured;
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://127.0.0.1:5001/api';
+    if (kIsWeb) {
+      return 'http://localhost:5001/api';
     }
-    return _legacyLanBaseUrl;
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      return _lanBaseUrl;
+    }
+    return 'http://localhost:5001/api';
   }
 
   static List<String> _candidateBaseUrls() {
@@ -64,12 +71,9 @@ class ApiService {
     add(_configuredBaseUrl);
 
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      add('http://127.0.0.1:5001/api');
       add('http://10.0.2.2:5001/api');
-      add(_legacyLanBaseUrl);
     } else {
       add('http://localhost:5001/api');
-      add(_legacyLanBaseUrl);
     }
     return candidates;
   }
@@ -79,7 +83,9 @@ class ApiService {
       return urlOrPath;
     }
     final apiUri = Uri.parse(baseUrl);
-    final normalizedPath = urlOrPath.startsWith('/') ? urlOrPath : '/$urlOrPath';
+    final normalizedPath = urlOrPath.startsWith('/')
+        ? urlOrPath
+        : '/$urlOrPath';
     return Uri(
       scheme: apiUri.scheme,
       host: apiUri.host,
@@ -89,16 +95,31 @@ class ApiService {
   }
 
   // ── Token ──────────────────────────────────────────────────────────────────
-  static Future<String?> getToken() => _storage.read(key: 'jwt_token');
-  static Future<void> saveToken(String t) async {
-    await _storage.write(key: 'jwt_token', value: t);
+  static Future<String?> getToken() async {
+    try {
+      final secureToken = await _storage.read(key: 'jwt_token');
+      if (secureToken != null) return secureToken;
+    } catch (_) {}
+
     final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('jwt_token') ?? prefs.getString(_bgTokenKey);
+  }
+
+  static Future<void> saveToken(String t) async {
+    try {
+      await _storage.write(key: 'jwt_token', value: t);
+    } catch (_) {}
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('jwt_token', t);
     await prefs.setString(_bgTokenKey, t);
   }
 
   static Future<void> deleteToken() async {
-    await _storage.delete(key: 'jwt_token');
+    try {
+      await _storage.delete(key: 'jwt_token');
+    } catch (_) {}
     final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('jwt_token');
     await prefs.remove(_bgTokenKey);
   }
 
@@ -109,18 +130,34 @@ class ApiService {
 
   // ── User ───────────────────────────────────────────────────────────────────
   static Future<Map<String, dynamic>?> getSavedUser() async {
-    final raw = await _storage.read(key: 'user_data');
+    try {
+      final raw = await _storage.read(key: 'user_data');
+      if (raw != null) return jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {}
+
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('user_data');
     if (raw == null) return null;
     return jsonDecode(raw) as Map<String, dynamic>;
   }
 
-  static Future<void> saveUser(Map<String, dynamic> user) =>
-      _storage.write(key: 'user_data', value: jsonEncode(user));
+  static Future<void> saveUser(Map<String, dynamic> user) async {
+    try {
+      await _storage.write(key: 'user_data', value: jsonEncode(user));
+    } catch (_) {}
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('user_data', jsonEncode(user));
+  }
 
   static Future<void> clearAll() async {
-    await _storage.deleteAll();
+    try {
+      await _storage.deleteAll();
+    } catch (_) {}
     final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('jwt_token');
+    await prefs.remove('user_data');
     await prefs.remove(_bgTokenKey);
+    await prefs.remove(_bgBaseUrlKey);
   }
 
   // ── Headers ────────────────────────────────────────────────────────────────
@@ -161,13 +198,13 @@ class ApiService {
     }
     if (error is TimeoutException) {
       throw ApiException(
-        'Connection timeout at $baseUrl. For USB Android run: adb reverse tcp:5001 tcp:5001',
+        'Connection timeout at $baseUrl. Put the phone and computer on the same Wi-Fi, or set API_BASE_URL to the computer LAN address.',
         0,
       );
     }
     if (error is SocketException) {
       throw ApiException(
-        'Cannot connect to server at $baseUrl. For USB Android run: adb reverse tcp:5001 tcp:5001',
+        'Cannot connect to server at $baseUrl. Put the phone and computer on the same Wi-Fi, or set API_BASE_URL to the computer LAN address.',
         0,
       );
     }
@@ -279,6 +316,21 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> delete(String endpoint) async {
+    try {
+      return _requestWithFallback((currentBaseUrl) async {
+        return http
+            .delete(
+              Uri.parse('$currentBaseUrl$endpoint'),
+              headers: await _headers(),
+            )
+            .timeout(const Duration(seconds: 15));
+      });
+    } catch (e) {
+      _networkError(e);
+    }
+  }
+
   // ── Multipart File Upload ──────────────────────────────────────────────────
   static Future<Map<String, dynamic>> uploadFile(
     String endpoint,
@@ -288,12 +340,16 @@ class ApiService {
     try {
       return _requestWithFallback((currentBaseUrl) async {
         final token = await getToken();
-        final request =
-            http.MultipartRequest('POST', Uri.parse('$currentBaseUrl$endpoint'));
+        final request = http.MultipartRequest(
+          'POST',
+          Uri.parse('$currentBaseUrl$endpoint'),
+        );
         if (token != null) request.headers['Authorization'] = 'Bearer $token';
         request.fields.addAll(fields);
         request.files.add(await http.MultipartFile.fromPath('file', filePath));
-        final streamed = await request.send().timeout(const Duration(seconds: 20));
+        final streamed = await request.send().timeout(
+          const Duration(seconds: 20),
+        );
         return http.Response.fromStream(streamed);
       });
     } catch (e) {

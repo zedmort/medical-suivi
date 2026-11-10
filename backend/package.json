@@ -7,7 +7,9 @@
     "dev": "nodemon server.js",
     "start": "node server.js",
     "migrate": "node scripts/migrate.js",
-    "render:postdeploy": "node scripts/migrate.js"
+    "create-admin": "node scripts/create-admin.js",
+    "render:postdeploy": "node scripts/migrate.js",
+    "test": "node --test"
   },
   "keywords": [],
   "author": "",

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:workmanager/workmanager.dart';
 import 'providers/auth_provider.dart';
@@ -11,11 +12,13 @@ import 'screens/doctor_dashboard.dart';
 import 'screens/labo_dashboard.dart';
 import 'screens/pharmacy_dashboard.dart';
 import 'screens/patient_dashboard.dart';
+import 'screens/admin_dashboard.dart';
 import 'screens/splash_screen.dart';
+import 'theme/medi_go_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+  await Workmanager().initialize(callbackDispatcher);
   await Workmanager().registerPeriodicTask(
     'medical-notification-check',
     notificationCheckTask,
@@ -49,54 +52,31 @@ class MedicalApp extends StatelessWidget {
       title: 'MediGo',
       debugShowCheckedModeBanner: false,
       locale: settings.locale,
-      supportedLocales: const [
-        Locale('en'),
-        Locale('fr'),
-        Locale('ar'),
-      ],
+      supportedLocales: const [Locale('en'), Locale('fr'), Locale('ar')],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
       themeMode: settings.themeMode,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1976D2)),
-        useMaterial3: true,
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFF1976D2), width: 2),
-          ),
+      theme: MediGoTheme.buildTheme().copyWith(
+        textTheme: GoogleFonts.poppinsTextTheme(
+          MediGoTheme.buildTheme().textTheme,
         ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF1976D2),
-            foregroundColor: Colors.white,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            textStyle:
-                const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-          ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.transparent,
+          foregroundColor: MediGoTheme.darkNavy,
+          elevation: 0,
+          centerTitle: false,
+          iconTheme: IconThemeData(color: MediGoTheme.darkNavy),
         ),
       ),
       darkTheme: ThemeData(
+        useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1976D2),
+          seedColor: const Color(0xFF0755C9),
           brightness: Brightness.dark,
         ),
-        useMaterial3: true,
       ),
       home: const SplashScreen(),
       routes: {
@@ -105,6 +85,7 @@ class MedicalApp extends StatelessWidget {
         '/labo': (_) => const LaboDashboard(),
         '/pharmacy': (_) => const PharmacyDashboard(),
         '/patient': (_) => const PatientDashboard(),
+        '/admin': (_) => const AdminDashboard(),
       },
     );
   }

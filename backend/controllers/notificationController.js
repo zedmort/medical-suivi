@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { findPatientForUser } = require("../utils/patientIdentity");
 
 const createDueAnalysisReminders = async (doctorId) => {
   const [dueRows] = await db.execute(
@@ -45,25 +46,13 @@ const notificationExists = async (userId, type, refId) => {
 };
 
 const resolvePatientRecordForUser = async (user) => {
-  const [byUserId] = await db.execute(
-    `SELECT id, firstname, lastname
-     FROM patients
-     WHERE user_id = ?
-     ORDER BY created_at DESC
-     LIMIT 1`,
-    [user.id]
+  const identity = await findPatientForUser(user);
+  if (!identity) return null;
+  const [rows] = await db.execute(
+    "SELECT id, firstname, lastname FROM patients WHERE id = ? LIMIT 1",
+    [identity.id],
   );
-  if (byUserId.length > 0) return byUserId[0];
-
-  const [byName] = await db.execute(
-    `SELECT id, firstname, lastname
-     FROM patients
-     WHERE LOWER(TRIM(CONCAT(firstname, ' ', lastname))) = LOWER(TRIM(?))
-     ORDER BY created_at DESC
-     LIMIT 1`,
-    [user.name || ""]
-  );
-  return byName[0] || null;
+  return rows[0] || null;
 };
 
 const createPatientAutoNotifications = async (user) => {

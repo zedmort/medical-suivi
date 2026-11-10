@@ -15,6 +15,7 @@ const Map<String, List<String>> specialtyDiseases = {
     'Dermatitis',
     'Skin Infection',
   ],
+  'diabetology': ['Type 1 Diabetes', 'Type 2 Diabetes'],
   'endocrinology': [
     'Type 1 Diabetes',
     'Type 2 Diabetes',
@@ -117,18 +118,21 @@ const Map<String, List<String>> specialtyDiseases = {
 
 List<String> get specialties => specialtyDiseases.keys.toList()..sort();
 
+const List<String> registrationSpecialties = ['diabetology', 'endocrinology'];
+
 List<String> diseasesForSpecialty(String? specialty) {
   if (specialty == null) return const [];
   return specialtyDiseases[specialty.toLowerCase()] ?? const [];
 }
 
-List<String> get allDiseases =>
-    specialtyDiseases.values.expand((d) => d).toSet().toList()..sort();
+List<String> get allDiseases => const ['Diabetes'];
 
 const Map<String, Map<String, String>> _specialtyTranslations = {
   'fr': {
     'cardiology': 'Cardiologie',
     'dermatology': 'Dermatologie',
+    'diabetology': 'Diabétologie',
+    'Diabetes': 'Diabète',
     'endocrinology': 'Endocrinologie',
     'gastroenterology': 'Gastro-entérologie',
     'gynecology': 'Gynécologie',
@@ -147,6 +151,8 @@ const Map<String, Map<String, String>> _specialtyTranslations = {
   'ar': {
     'cardiology': 'أمراض القلب',
     'dermatology': 'الأمراض الجلدية',
+    'diabetology': 'طب السكري',
+    'Diabetes': 'السكري',
     'endocrinology': 'الغدد الصماء',
     'gastroenterology': 'أمراض الجهاز الهضمي',
     'gynecology': 'طب النساء',
@@ -166,6 +172,7 @@ const Map<String, Map<String, String>> _specialtyTranslations = {
 
 const Map<String, Map<String, String>> _diseaseTranslations = {
   'fr': {
+    'Diabetes': 'Diabète',
     'Hypertension': 'Hypertension',
     'Coronary Artery Disease': 'Maladie coronarienne',
     'Heart Failure': 'Insuffisance cardiaque',
@@ -246,6 +253,7 @@ const Map<String, Map<String, String>> _diseaseTranslations = {
     'Urinary Incontinence': 'Incontinence urinaire',
   },
   'ar': {
+    'Diabetes': 'السكري',
     'Hypertension': 'ارتفاع ضغط الدم',
     'Coronary Artery Disease': 'مرض الشريان التاجي',
     'Heart Failure': 'قصور القلب',

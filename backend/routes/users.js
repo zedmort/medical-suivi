@@ -2,25 +2,12 @@ const express = require("express");
 const router = express.Router();
 const verifyToken = require("../middleware/verifyToken");
 const db = require("../config/db");
+const { getMe, updateMe, getDoctors } = require("../controllers/userController");
 
 // GET /api/users/me  — returns the authenticated user's profile
-router.get("/me", verifyToken, async (req, res) => {
-  try {
-    const [rows] = await db.execute(
-      "SELECT id, name, email, role, specialty, created_at FROM users WHERE id = ?",
-      [req.user.id]
-    );
-
-    if (rows.length === 0) {
-      return res.status(404).json({ message: "User not found." });
-    }
-
-    return res.status(200).json({ user: rows[0] });
-  } catch (err) {
-    console.error("Get /me error:", err);
-    return res.status(500).json({ message: "Server error." });
-  }
-});
+router.get("/me", verifyToken, getMe);
+router.put("/me", verifyToken, updateMe);
+router.get("/doctors", verifyToken, getDoctors);
 
 // GET /api/users?role=patient|doctor|labo|pharmacy  — list users by role (doctor only)
 router.get("/", verifyToken, async (req, res) => {

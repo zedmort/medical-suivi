@@ -1,0 +1,11 @@
+{
+  "build": {
+    "builder": "NPM"
+  },
+  "start": {
+    "command": "node server.js"
+  },
+  "env": {
+    "NODE_ENV": "production"
+  }
+}

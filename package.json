@@ -1,0 +1,11 @@
+{
+  "name": "medical-suivi",
+  "private": true,
+  "workspaces": [
+    "backend"
+  ],
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "cd backend && npm run dev"
+  }
+}

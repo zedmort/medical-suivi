@@ -5,7 +5,9 @@ import '../services/api_service.dart';
 import '../services/local_notification_service.dart';
 
 class NotificationBell extends StatefulWidget {
-  const NotificationBell({super.key});
+  const NotificationBell({super.key, this.iconColor = Colors.white});
+
+  final Color iconColor;
 
   @override
   State<NotificationBell> createState() => _NotificationBellState();
@@ -31,11 +33,7 @@ class _NotificationBellState extends State<NotificationBell> {
     final seen = prefs.getStringList(_seenIdsKey) ?? <String>[];
     _seenNotificationIds
       ..clear()
-      ..addAll(
-        seen
-            .map((e) => int.tryParse(e))
-            .whereType<int>(),
-      );
+      ..addAll(seen.map((e) => int.tryParse(e)).whereType<int>());
     await _fetch();
   }
 
@@ -56,7 +54,9 @@ class _NotificationBellState extends State<NotificationBell> {
   Future<void> _fetch() async {
     try {
       final res = await ApiService.get('/notifications');
-      final incoming = List<Map<String, dynamic>>.from(res['notifications'] ?? []);
+      final incoming = List<Map<String, dynamic>>.from(
+        res['notifications'] ?? [],
+      );
 
       var seenChanged = false;
       for (final n in incoming) {
@@ -134,7 +134,7 @@ class _NotificationBellState extends State<NotificationBell> {
       icon: Stack(
         clipBehavior: Clip.none,
         children: [
-          const Icon(Icons.notifications_outlined, color: Colors.white),
+          Icon(Icons.notifications_outlined, color: widget.iconColor),
           if (_unread > 0)
             Positioned(
               right: -4,
@@ -142,15 +142,17 @@ class _NotificationBellState extends State<NotificationBell> {
               child: Container(
                 padding: const EdgeInsets.all(3),
                 decoration: const BoxDecoration(
-                    color: Colors.red, shape: BoxShape.circle),
-                constraints:
-                    const BoxConstraints(minWidth: 16, minHeight: 16),
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                ),
+                constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
                 child: Text(
                   _unread > 9 ? '9+' : '$_unread',
                   style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold),
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -192,24 +194,27 @@ class _NotificationSheet extends StatelessWidget {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2)),
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
             // ── header ──
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               child: Row(
                 children: [
-                  const Text('Notifications',
-                      style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Notifications',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
                   const Spacer(),
                   if (notifications.any((n) => n['is_read'] == 0))
                     TextButton(
                       onPressed: onMarkAllRead,
-                      child: const Text('Tout lire',
-                          style: TextStyle(fontSize: 12)),
+                      child: const Text(
+                        'Tout lire',
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                 ],
               ),
@@ -222,11 +227,16 @@ class _NotificationSheet extends StatelessWidget {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.notifications_none,
-                              size: 48, color: Colors.grey.shade300),
+                          Icon(
+                            Icons.notifications_none,
+                            size: 48,
+                            color: Colors.grey.shade300,
+                          ),
                           const SizedBox(height: 8),
-                          const Text('Aucune notification',
-                              style: TextStyle(color: Colors.grey)),
+                          const Text(
+                            'Aucune notification',
+                            style: TextStyle(color: Colors.grey),
+                          ),
                         ],
                       ),
                     )
@@ -244,29 +254,37 @@ class _NotificationSheet extends StatelessWidget {
                               ? const Color(0xFFE3F2FD)
                               : Colors.transparent,
                           leading: CircleAvatar(
-                            backgroundColor:
-                                _typeColor(type).withAlpha(40),
-                            child: Icon(_typeIcon(type),
-                                color: _typeColor(type), size: 20),
+                            backgroundColor: _typeColor(type).withAlpha(40),
+                            child: Icon(
+                              _typeIcon(type),
+                              color: _typeColor(type),
+                              size: 20,
+                            ),
                           ),
-                          title: Text(n['title']?.toString() ?? '',
-                              style: TextStyle(
-                                  fontWeight: unread
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                  fontSize: 14)),
+                          title: Text(
+                            n['title']?.toString() ?? '',
+                            style: TextStyle(
+                              fontWeight: unread
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                              fontSize: 14,
+                            ),
+                          ),
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(n['body']?.toString() ?? '',
-                                  style: const TextStyle(fontSize: 12),
-                                  maxLines: 3,
-                                  overflow: TextOverflow.ellipsis),
                               Text(
-                                _fmtDate(
-                                    n['created_at']?.toString()),
+                                n['body']?.toString() ?? '',
+                                style: const TextStyle(fontSize: 12),
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                _fmtDate(n['created_at']?.toString()),
                                 style: const TextStyle(
-                                    fontSize: 10, color: Colors.grey),
+                                  fontSize: 10,
+                                  color: Colors.grey,
+                                ),
                               ),
                             ],
                           ),

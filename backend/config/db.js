@@ -1,30 +1,45 @@
 const mysql2 = require("mysql2");
 require("dotenv").config();
 
-const poolConfig = process.env.DATABASE_URL
-  ? { uri: process.env.DATABASE_URL }
-  : {
-      host: process.env.DB_HOST || "localhost",
-      user: process.env.DB_USER || "root",
-      password: process.env.DB_PASSWORD || "",
-      database: process.env.DB_NAME || "medical_suivi",
-    };
+const resolveDbConfig = () => {
+  if (process.env.DATABASE_URL || process.env.MYSQL_URL) {
+    return { uri: process.env.DATABASE_URL || process.env.MYSQL_URL };
+  }
+
+  const dbHost = process.env.DB_HOST || process.env.MYSQLHOST || "localhost";
+  const dbUser = process.env.DB_USER || process.env.MYSQLUSER || "root";
+  const dbPassword = process.env.DB_PASSWORD || process.env.MYSQLPASSWORD || "";
+  const dbName = process.env.DB_NAME || process.env.MYSQL_DATABASE || "railway";
+  const dbPort = process.env.DB_PORT || process.env.MYSQLPORT || 3306;
+
+  return {
+    host: dbHost,
+    port: Number(dbPort),
+    user: dbUser,
+    password: dbPassword,
+    database: dbName,
+  };
+};
+
+const poolConfig = resolveDbConfig();
 
 const isLocalHost = (host) => {
   const h = (host || "").toString().toLowerCase();
   return h === "localhost" || h === "127.0.0.1" || h === "::1";
 };
 
-if (process.env.DB_SSL === "true" || (process.env.DB_SSL !== "false" && !process.env.DATABASE_URL && !isLocalHost(process.env.DB_HOST))) {
+if (process.env.DB_SSL === "true" || (process.env.DB_SSL !== "false" && !process.env.DATABASE_URL && !process.env.MYSQL_URL && !isLocalHost(process.env.DB_HOST || process.env.MYSQLHOST))) {
   poolConfig.ssl = { rejectUnauthorized: false };
 }
-if (process.env.DB_SSL === "true" && process.env.DATABASE_URL) {
+if (process.env.DB_SSL === "true" && (process.env.DATABASE_URL || process.env.MYSQL_URL)) {
   poolConfig.ssl = { rejectUnauthorized: false };
 }
 
 poolConfig.waitForConnections = true;
 poolConfig.connectionLimit = 10;
 poolConfig.queueLimit = 0;
+
+poolConfig.charset = 'utf8mb4';
 
 const pool = mysql2.createPool(poolConfig);
 

@@ -61,6 +61,23 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
 });
 
+const imageUpload = multer({
+  storage: cloudinaryStorage || localStorage,
+  fileFilter: (req, file, cb) => {
+    const extension = path.extname(file.originalname).toLowerCase();
+    const allowedTypes = ["image/jpeg", "image/png"];
+    if (
+      [".jpg", ".jpeg", ".png"].includes(extension) &&
+      allowedTypes.includes(file.mimetype)
+    ) {
+      cb(null, true);
+    } else {
+      cb(new Error("Advertisement image must be a JPEG or PNG file."));
+    }
+  },
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
 const getFileUrl = (file) => {
   if (!file) return null;
   if (typeof file.path === "string" && /^https?:\/\//i.test(file.path)) {
@@ -73,5 +90,6 @@ const getFileUrl = (file) => {
 };
 
 upload.getFileUrl = getFileUrl;
+upload.image = imageUpload;
 
 module.exports = upload;

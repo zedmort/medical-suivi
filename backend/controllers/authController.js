@@ -2,31 +2,56 @@ const db = require("../config/db");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const {
-  isValidSpecialty,
+  isValidRegistrationSpecialty,
   isKnownDisease,
 } = require("../config/medicalTaxonomy");
 require("dotenv").config();
 
 const SALT_ROUNDS = 10;
 
+const isValidDateOfBirth = (value) => {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) &&
+    date.toISOString().slice(0, 10) === value &&
+    date < new Date();
+};
+
+const calculateAge = (dateOfBirth) => {
+  const dob = new Date(`${dateOfBirth}T00:00:00Z`);
+  const now = new Date();
+  let age = now.getUTCFullYear() - dob.getUTCFullYear();
+  if (
+    now.getUTCMonth() < dob.getUTCMonth() ||
+    (now.getUTCMonth() === dob.getUTCMonth() && now.getUTCDate() < dob.getUTCDate())
+  ) {
+    age--;
+  }
+  return age;
+};
+
 // POST /api/auth/register
 const register = async (req, res) => {
   const {
-    name,
     email,
     password,
     role,
-    specialty,
     firstname,
     lastname,
-    age,
+    date_of_birth,
     address,
     sex,
-    disease,
     phone,
+    doctor_type,
+    specialties,
+    professional_info,
+    conditions,
   } = req.body;
 
-  if (!name || !email || !password || !role) {
+  if (!email || !password || !role || !firstname || !lastname ||
+      !date_of_birth || !address || !phone) {
     return res.status(400).json({ message: "All fields are required." });
   }
 
@@ -35,74 +60,148 @@ const register = async (req, res) => {
     return res.status(400).json({ message: `Role must be one of: ${validRoles.join(", ")}` });
   }
 
-  if (role === "doctor") {
-    if (!specialty || !isValidSpecialty(specialty)) {
-      return res.status(400).json({ message: "Valid doctor specialty is required." });
-    }
+  if (!isValidDateOfBirth(date_of_birth)) {
+    return res.status(400).json({ message: "A valid date of birth is required." });
   }
 
-  if (role === "patient") {
-    if (!firstname || !lastname || !address || !age || !sex || !disease) {
+  if (typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    return res.status(400).json({ message: "A valid email address is required." });
+  }
+
+  const normalizedSpecialties = Array.isArray(specialties)
+    ? [...new Set(specialties.map((value) => String(value).trim().toLowerCase()))]
+    : [];
+  if (role === "doctor") {
+    if (!["general_practitioner", "specialist"].includes(doctor_type)) {
+      return res.status(400).json({ message: "Doctor type must be general_practitioner or specialist." });
+    }
+    if (
+      normalizedSpecialties.length > 1 ||
+      normalizedSpecialties.some((specialty) => !isValidRegistrationSpecialty(specialty)) ||
+      (doctor_type === "specialist" && normalizedSpecialties.length === 0) ||
+      (doctor_type === "general_practitioner" && normalizedSpecialties.length > 0)
+    ) {
       return res.status(400).json({
-        message: "firstname, lastname, age, address, sex and disease are required for patient registration.",
+        message: "Specialists must select either diabetology or thyroid diseases; general practitioners must not select a specialty.",
       });
     }
-    if (!["M", "F"].includes(sex)) {
-      return res.status(400).json({ message: "sex must be M or F." });
+  }
+
+  const normalizedConditions = role === "patient" && Array.isArray(conditions)
+    ? [...new Set(conditions.map((value) => String(value).trim()))]
+    : [];
+  if (role === "patient") {
+    if (!sex || !["M", "F"].includes(sex) ||
+        normalizedConditions.length === 0 ||
+        normalizedConditions.some((condition) => !isKnownDisease(condition))) {
+      return res.status(400).json({
+        message: "A valid sex and at least one recognized medical condition are required for patient registration.",
+      });
     }
-    const parsedAge = parseInt(age, 10);
-    if (Number.isNaN(parsedAge) || parsedAge <= 0) {
-      return res.status(400).json({ message: "age must be a valid number." });
-    }
-    if (!isKnownDisease(disease)) {
-      return res.status(400).json({ message: "Please choose a disease from the medical list." });
+    if (calculateAge(date_of_birth) < 0 || calculateAge(date_of_birth) > 125) {
+      return res.status(400).json({ message: "Date of birth is outside the supported age range." });
     }
   }
 
+  const firstName = firstname.toString().trim();
+  const lastName = lastname.toString().trim();
+  const fullName = `${firstName} ${lastName}`.trim();
+  const normalizedEmail = email.trim().toLowerCase();
+  const patientAge = role === "patient" ? calculateAge(date_of_birth) : null;
+  let connection;
+  let transactionStarted = false;
   try {
-    const [existing] = await db.execute("SELECT id FROM users WHERE email = ?", [email]);
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+    transactionStarted = true;
+    const [existing] = await connection.execute("SELECT id FROM users WHERE email = ?", [normalizedEmail]);
     if (existing.length > 0) {
+      await connection.rollback();
+      transactionStarted = false;
       return res.status(409).json({ message: "Email already registered." });
     }
 
     const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
 
-    const fullName = role === "patient"
-      ? `${firstname}`.trim() + " " + `${lastname}`.trim()
-      : name;
-
-    const [result] = await db.execute(
-      "INSERT INTO users (name, email, password_hash, role, specialty) VALUES (?, ?, ?, ?, ?)",
-      [fullName, email, password_hash, role, role === "doctor" ? specialty.toString().trim().toLowerCase() : null]
+    const [result] = await connection.execute(
+      `INSERT INTO users
+         (name, email, password_hash, role, specialty, firstname, lastname,
+          date_of_birth, address, phone, doctor_type, professional_info)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        fullName,
+        normalizedEmail,
+        password_hash,
+        role,
+        normalizedSpecialties[0] || null,
+        firstName,
+        lastName,
+        date_of_birth,
+        address.toString().trim(),
+        phone.toString().trim(),
+        role === "doctor" ? doctor_type : null,
+        role === "doctor" && professional_info
+          ? professional_info.toString().trim()
+          : null,
+      ]
     );
 
-    if (role === "patient") {
-      await db.execute(
-        `INSERT INTO patients (user_id, doctor_id, firstname, lastname, address, age, sex, disease, phone)
-         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          result.insertId,
-          firstname.toString().trim(),
-          lastname.toString().trim(),
-          address.toString().trim(),
-          parseInt(age, 10),
-          sex,
-          disease.toString().trim(),
-          phone ? phone.toString().trim() : null,
-        ]
-      );
+    if (role === "doctor") {
+      for (const specialty of normalizedSpecialties) {
+        const [specialtyResult] = await connection.execute(
+          `INSERT INTO doctor_specialties (doctor_id, specialty_id)
+           SELECT ?, id FROM specialties WHERE slug = ?`,
+          [result.insertId, specialty],
+        );
+        if (specialtyResult.affectedRows === 0) {
+          throw new Error(`Unknown specialty: ${specialty}`);
+        }
+      }
     }
 
+    if (role === "patient") {
+      const [patientResult] = await connection.execute(
+        `INSERT INTO patients
+           (user_id, doctor_id, firstname, lastname, address, age, date_of_birth, sex, disease, phone)
+         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          result.insertId,
+          firstName,
+          lastName,
+          address.toString().trim(),
+          patientAge,
+          date_of_birth,
+          sex,
+          normalizedConditions[0],
+          phone.toString().trim(),
+        ]
+      );
+      for (const condition of normalizedConditions) {
+        const [conditionResult] = await connection.execute(
+          `INSERT INTO patient_conditions (patient_id, condition_id)
+           SELECT ?, id FROM medical_conditions WHERE name = ?`,
+          [patientResult.insertId, condition],
+        );
+        if (conditionResult.affectedRows === 0) {
+          throw new Error(`Unknown medical condition: ${condition}`);
+        }
+      }
+    }
+
+    await connection.commit();
+    transactionStarted = false;
     return res.status(201).json({
       message: "User registered successfully.",
       userId: result.insertId,
     });
   } catch (err) {
+    if (connection && transactionStarted) await connection.rollback();
     console.error("Register error:", err);
     return res.status(500).json({
-      message: `Server error during registration: ${err && err.message ? err.message : "unknown error"}`,
-      error: err && err.code ? err.code : undefined,
+      message: "Server error during registration.",
     });
+  } finally {
+    connection?.release();
   }
 };
 

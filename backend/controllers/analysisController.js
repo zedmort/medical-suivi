@@ -1,25 +1,10 @@
 const db = require("../config/db");
 const upload = require("../config/multer");
 const { createNotification } = require("./notificationController");
-
-const findPatientUserId = async (patientId) => {
-  const [rows] = await db.execute(
-    `SELECT p.user_id AS id, CONCAT(p.firstname, ' ', p.lastname) AS full_name
-     FROM patients p
-     WHERE p.id = ?
-     LIMIT 1`,
-    [patientId]
-  );
-
-  if (!rows[0]) return null;
-  if (rows[0].id) return rows[0].id;
-
-  const [legacy] = await db.execute(
-    `SELECT id FROM users WHERE role = 'patient' AND LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1`,
-    [rows[0].full_name]
-  );
-  return legacy[0]?.id || null;
-};
+const {
+  findPatientForUser,
+  findUserIdForPatient,
+} = require("../utils/patientIdentity");
 
 // POST /api/analysis/create  (doctor only)
 const createRequest = async (req, res) => {
@@ -56,7 +41,7 @@ const createRequest = async (req, res) => {
       result.insertId
     );
 
-    const patientUserId = await findPatientUserId(patient_id);
+    const patientUserId = await findUserIdForPatient(patient_id);
     if (patientUserId) {
       await createNotification(
         patientUserId,
@@ -134,7 +119,7 @@ const uploadResult = async (req, res) => {
     );
     const patientId = patientRow[0]?.patient_id;
     if (patientId) {
-      const patientUserId = await findPatientUserId(patientId);
+      const patientUserId = await findUserIdForPatient(patientId);
       if (patientUserId) {
         await createNotification(
           patientUserId,
@@ -183,27 +168,8 @@ const getMyRequests = async (req, res) => {
         [id]
       );
     } else if (role === "patient") {
-      const [patientRows] = await db.execute(
-        `SELECT id FROM patients
-         WHERE user_id = ?
-         LIMIT 1`,
-        [id]
-      );
-
-      let patientId = patientRows[0]?.id;
-
-      if (!patientId) {
-        const [legacyRows] = await db.execute(
-          `SELECT id FROM patients
-           WHERE LOWER(TRIM(CONCAT(firstname, ' ', lastname))) = LOWER(TRIM(?))
-           ORDER BY created_at DESC
-           LIMIT 1`,
-          [req.user.name || ""]
-        );
-        patientId = legacyRows[0]?.id;
-      }
-
-      if (!patientId) {
+      const patient = await findPatientForUser(req.user);
+      if (!patient) {
         return res.status(200).json({ requests: [] });
       }
 
@@ -215,7 +181,7 @@ const getMyRequests = async (req, res) => {
          LEFT JOIN analysis_results ar2 ON ar2.request_id = ar.id
          WHERE ar.patient_id = ?
          ORDER BY ar.created_at DESC`,
-        [patientId]
+        [patient.id]
       );
     } else {
       return res.status(403).json({ message: "Access denied." });
