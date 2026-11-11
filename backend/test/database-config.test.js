@@ -59,6 +59,15 @@ test("Railway MYSQL_URL stays plaintext at the MySQL layer", () => {
   assert.equal(new URL(config.uri).searchParams.has("ssl"), false);
 });
 
+test("MYSQL_URL takes precedence consistently when both URL variables are set", () => {
+  const config = loadPoolConfig({
+    MYSQL_URL: "mysql://user:password@mysql.railway.internal:3306/railway",
+    DATABASE_URL: "mysql://user:password@other.example.test:3306/other",
+  });
+  assert.equal(new URL(config.uri).hostname, "mysql.railway.internal");
+  assert.equal(new URL(config.uri).pathname, "/railway");
+});
+
 test("DB_SSL=true enables TLS for an external database URL", () => {
   const config = loadPoolConfig({
     MYSQL_URL: "mysql://user:password@mysql.example.test:3306/railway",

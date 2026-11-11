@@ -262,6 +262,56 @@ test("doctor registration rejects a specialty outside the two supported areas", 
   assert.equal(res.statusCode, 400);
 });
 
+test("patient registration writes the user and medical condition transactionally", async () => {
+  const originalGetConnection = dbStub.getConnection;
+  const executedSql = [];
+  let committed = false;
+  dbStub.getConnection = async () => ({
+    beginTransaction: async () => {},
+    commit: async () => { committed = true; },
+    rollback: async () => {},
+    release: () => {},
+    execute: async (sql) => {
+      executedSql.push(sql);
+      if (sql.includes("SELECT id FROM users WHERE email")) return [[]];
+      if (sql.includes("INSERT INTO users")) return [{ insertId: 51 }];
+      if (sql.includes("INSERT INTO patients")) return [{ insertId: 61 }];
+      if (sql.includes("INSERT INTO patient_conditions")) return [{ affectedRows: 1 }];
+      throw new Error(`Unexpected SQL in test: ${sql}`);
+    },
+  });
+
+  try {
+    const res = responseRecorder();
+    await register(
+      {
+        body: {
+          email: "  patient@example.test ",
+          password: "valid-password",
+          role: "patient",
+          firstname: "Test",
+          lastname: "Patient",
+          date_of_birth: "1990-01-01",
+          address: "Test address",
+          phone: "0000000000",
+          sex: "F",
+          conditions: ["Diabetes"],
+        },
+      },
+      res,
+    );
+
+    assert.equal(res.statusCode, 201);
+    assert.equal(res.body.userId, 51);
+    assert.equal(committed, true);
+    assert.ok(executedSql.some((sql) => sql.includes("INSERT INTO users")));
+    assert.ok(executedSql.some((sql) => sql.includes("INSERT INTO patients")));
+    assert.ok(executedSql.some((sql) => sql.includes("INSERT INTO patient_conditions")));
+  } finally {
+    dbStub.getConnection = originalGetConnection;
+  }
+});
+
 test("login normalizes email casing and surrounding whitespace", async () => {
   const bcrypt = require("bcrypt");
   const originalExecute = dbStub.execute;
@@ -296,6 +346,32 @@ test("login normalizes email casing and surrounding whitespace", async () => {
     dbStub.execute = originalExecute;
     if (originalSecret === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = originalSecret;
+  }
+});
+
+test("login rejects an incorrect password for an existing account", async () => {
+  const bcrypt = require("bcrypt");
+  const originalExecute = dbStub.execute;
+  const passwordHash = await bcrypt.hash("valid-password", 4);
+  dbStub.execute = async () => [[{
+    id: 21,
+    name: "Test Doctor",
+    email: "doctor@example.test",
+    role: "doctor",
+    specialty: "diabetology",
+    password_hash: passwordHash,
+  }]];
+
+  try {
+    const res = responseRecorder();
+    await login(
+      { body: { email: "doctor@example.test", password: "wrong-password" } },
+      res,
+    );
+    assert.equal(res.statusCode, 401);
+    assert.equal(res.body.message, "Invalid credentials.");
+  } finally {
+    dbStub.execute = originalExecute;
   }
 });
 
