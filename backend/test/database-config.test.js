@@ -35,6 +35,12 @@ test("external MySQL hosts retain the TLS-by-default behavior", () => {
   assert.deepEqual(config.ssl, { rejectUnauthorized: false });
 });
 
+test("the localhost fallback does not request TLS when DB host variables are absent", () => {
+  const config = loadPoolConfig({});
+  assert.equal(config.host, "localhost");
+  assert.equal(config.ssl, undefined);
+});
+
 test("Railway private host ignores the stale DB_SSL=true override", () => {
   const config = loadPoolConfig({
     MYSQLHOST: "mysql.railway.internal",

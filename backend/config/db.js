@@ -1,5 +1,6 @@
 const mysql2 = require("mysql2");
-require("dotenv").config();
+const path = require("node:path");
+require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
 const resolveDbConfig = () => {
   if (process.env.DATABASE_URL || process.env.MYSQL_URL) {
@@ -48,7 +49,8 @@ if (railwayPrivateConnection && poolConfig.uri) {
   poolConfig.uri = uri.toString();
 }
 
-if (!railwayPrivateConnection && (process.env.DB_SSL === "true" || (process.env.DB_SSL !== "false" && !poolConfig.uri && !isPrivateHost(process.env.DB_HOST || process.env.MYSQLHOST)))) {
+const databaseHost = poolConfig.uri ? uriHost : poolConfig.host;
+if (!railwayPrivateConnection && (process.env.DB_SSL === "true" || (process.env.DB_SSL !== "false" && !poolConfig.uri && !isPrivateHost(databaseHost)))) {
   poolConfig.ssl = { rejectUnauthorized: false };
 }
 if (!railwayPrivateConnection && process.env.DB_SSL === "true" && poolConfig.uri) {

@@ -13,9 +13,41 @@ import 'package:mobile/screens/subscription_screens.dart';
 import 'package:mobile/widgets/notification_bell.dart';
 import 'package:mobile/widgets/dashboard_shell.dart';
 import 'package:mobile/screens/role_selection_screen.dart';
+import 'package:mobile/screens/register_screen.dart';
 import 'package:mobile/theme/medi_go_theme.dart';
 
 void main() {
+  testWidgets('signup form scrolls without bottom overflow on short screens', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetViewInsets);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AuthProvider>.value(
+        value: _RoleAuthProvider('patient'),
+        child: const MaterialApp(
+          locale: Locale('fr'),
+          supportedLocales: [Locale('fr')],
+          localizationsDelegates: [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: RegisterScreen(initialRole: 'patient'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
+  });
+
   testWidgets('dashboard tabs stay readable and scroll on narrow screens', (
     tester,
   ) async {

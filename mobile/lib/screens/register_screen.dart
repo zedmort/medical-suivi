@@ -264,11 +264,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             color: primary,
                           ),
                           const SizedBox(width: 10),
-                          Text(
-                            '${t('registering_as')} ${t(_selectedRole)}',
-                            style: const TextStyle(
-                              color: MediGoTheme.darkNavy,
-                              fontWeight: FontWeight.w700,
+                          Expanded(
+                            child: Text(
+                              '${t('registering_as')} ${t(_selectedRole)}',
+                              softWrap: true,
+                              style: const TextStyle(
+                                color: MediGoTheme.darkNavy,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ],
@@ -634,11 +637,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 4,
+                      runSpacing: 4,
                       children: [
                         Text(
-                          '${t('already_have_account')} ',
+                          t('already_have_account'),
                           style: const TextStyle(
                             color: MediGoTheme.secondaryGrey,
                           ),
