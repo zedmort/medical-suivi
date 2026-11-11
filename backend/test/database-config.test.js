@@ -1,83 +1,70 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
-const mysql2 = require("mysql2");
+const { execFileSync } = require("node:child_process");
+const path = require("node:path");
 
-const dbPath = require.resolve("../config/db");
-const envKeys = [
-  "DATABASE_URL",
-  "MYSQL_URL",
-  "DB_SSL",
-  "DB_HOST",
-  "MYSQLHOST",
-  "DB_USER",
-  "MYSQLUSER",
-  "DB_PASSWORD",
-  "MYSQLPASSWORD",
-  "DB_NAME",
-  "MYSQL_DATABASE",
-  "DB_PORT",
-  "MYSQLPORT",
-];
-
-const loadPoolConfig = async (values) => {
-  const previous = new Map(envKeys.map((key) => [key, process.env[key]]));
-  for (const key of envKeys) {
-    if (!(key in values) || values[key] === undefined) delete process.env[key];
-    else process.env[key] = values[key];
-  }
-
-  const originalCreatePool = mysql2.createPool;
-  const originalConsoleLog = console.log;
-  let poolConfig;
-  mysql2.createPool = (config) => {
-    poolConfig = config;
-    return {
-      promise: () => ({
-        getConnection: async () => ({ release() {} }),
-      }),
+const loadPoolConfig = (values) => {
+  const script = `
+    require("dotenv").config = () => ({});
+    const mysql = require("mysql2");
+    mysql.createPool = (config) => {
+      process.stdout.write(JSON.stringify(config));
+      return { promise: () => ({ getConnection: async () => ({ release() {} }) }) };
     };
-  };
-  console.log = () => {};
-  delete require.cache[dbPath];
-  try {
-    require("../config/db");
-    await new Promise((resolve) => setImmediate(resolve));
-    return poolConfig;
-  } finally {
-    delete require.cache[dbPath];
-    mysql2.createPool = originalCreatePool;
-    console.log = originalConsoleLog;
-    for (const [key, value] of previous) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
+    console.log = () => {};
+    require("./config/db");
+  `;
+  const env = { PATH: process.env.PATH };
+  for (const [key, value] of Object.entries(values)) {
+    if (value !== undefined) env[key] = value;
   }
+  return JSON.parse(execFileSync(process.execPath, ["-e", script], {
+    cwd: path.join(__dirname, ".."),
+    env,
+    encoding: "utf8",
+  }));
 };
 
-test("Railway private MySQL hosts do not request driver TLS by default", async () => {
-  const config = await loadPoolConfig({ MYSQLHOST: "mysql.railway.internal" });
+test("Railway private MySQL hosts do not request driver TLS by default", () => {
+  const config = loadPoolConfig({ MYSQLHOST: "mysql.railway.internal" });
   assert.equal(config.ssl, undefined);
 });
 
-test("external MySQL hosts retain the TLS-by-default behavior", async () => {
-  const config = await loadPoolConfig({ DB_HOST: "mysql.example.test" });
+test("external MySQL hosts retain the TLS-by-default behavior", () => {
+  const config = loadPoolConfig({ DB_HOST: "mysql.example.test" });
   assert.deepEqual(config.ssl, { rejectUnauthorized: false });
 });
 
-test("explicit DB_SSL settings override the host-based default", async (t) => {
-  await t.test("true enables TLS for a Railway private host", async () => {
-    const config = await loadPoolConfig({
-      MYSQLHOST: "mysql.railway.internal",
-      DB_SSL: "true",
-    });
-    assert.deepEqual(config.ssl, { rejectUnauthorized: false });
+test("Railway private host ignores the stale DB_SSL=true override", () => {
+  const config = loadPoolConfig({
+    MYSQLHOST: "mysql.railway.internal",
+    DB_SSL: "true",
   });
+  assert.equal(config.ssl, undefined);
+});
 
-  await t.test("false disables TLS for an external host", async () => {
-    const config = await loadPoolConfig({
-      DB_HOST: "mysql.example.test",
-      DB_SSL: "false",
-    });
-    assert.equal(config.ssl, undefined);
+test("Railway MYSQL_URL stays plaintext at the MySQL layer", () => {
+  const config = loadPoolConfig({
+    MYSQL_URL: "mysql://user:password@mysql.railway.internal:3306/railway?ssl=%7B%22rejectUnauthorized%22%3Atrue%7D",
+    DB_SSL: "true",
   });
+  assert.equal(config.ssl, undefined);
+  assert.equal(new URL(config.uri).hostname, "mysql.railway.internal");
+  assert.equal(new URL(config.uri).searchParams.has("ssl"), false);
+});
+
+test("DB_SSL=true enables TLS for an external database URL", () => {
+  const config = loadPoolConfig({
+    MYSQL_URL: "mysql://user:password@mysql.example.test:3306/railway",
+    DB_SSL: "true",
+  });
+  assert.deepEqual(config.ssl, { rejectUnauthorized: false });
+});
+
+test("DB_SSL=false disables TLS for an external host", () => {
+  const config = loadPoolConfig({
+    DB_HOST: "mysql.example.test",
+    DB_SSL: "false",
+  });
+  assert.equal(config.ssl, undefined);
 });

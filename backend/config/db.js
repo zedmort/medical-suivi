@@ -23,18 +23,35 @@ const resolveDbConfig = () => {
 
 const poolConfig = resolveDbConfig();
 
+const isRailwayPrivateHost = (host) =>
+  (host || "").toString().toLowerCase().endsWith(".railway.internal");
+
 const isPrivateHost = (host) => {
   const hostname = (host || "").toString().toLowerCase();
   return hostname === "localhost" ||
     hostname === "127.0.0.1" ||
     hostname === "::1" ||
-    hostname.endsWith(".railway.internal");
+    isRailwayPrivateHost(hostname);
 };
 
-if (process.env.DB_SSL === "true" || (process.env.DB_SSL !== "false" && !process.env.DATABASE_URL && !process.env.MYSQL_URL && !isPrivateHost(process.env.DB_HOST || process.env.MYSQLHOST))) {
+const uriHost = poolConfig.uri ? new URL(poolConfig.uri).hostname : null;
+const railwayPrivateConnection =
+  isRailwayPrivateHost(uriHost) ||
+  (!poolConfig.uri &&
+    isRailwayPrivateHost(process.env.DB_HOST || process.env.MYSQLHOST));
+
+if (railwayPrivateConnection && poolConfig.uri) {
+  const uri = new URL(poolConfig.uri);
+  for (const key of [...uri.searchParams.keys()]) {
+    if (/^(?:ssl|tls)(?:[-_].*)?$/i.test(key)) uri.searchParams.delete(key);
+  }
+  poolConfig.uri = uri.toString();
+}
+
+if (!railwayPrivateConnection && (process.env.DB_SSL === "true" || (process.env.DB_SSL !== "false" && !poolConfig.uri && !isPrivateHost(process.env.DB_HOST || process.env.MYSQLHOST)))) {
   poolConfig.ssl = { rejectUnauthorized: false };
 }
-if (process.env.DB_SSL === "true" && (process.env.DATABASE_URL || process.env.MYSQL_URL)) {
+if (!railwayPrivateConnection && process.env.DB_SSL === "true" && poolConfig.uri) {
   poolConfig.ssl = { rejectUnauthorized: false };
 }
 

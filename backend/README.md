@@ -20,10 +20,12 @@ The backend enables MySQL TLS by default for external host-based connections.
 For Railway services in the same project and environment, use the internal
 `MYSQLHOST`/`MYSQL_URL` connection: Railway encrypts private service traffic
 over WireGuard, and its MySQL server may reject a separate MySQL TLS handshake.
-That private hostname therefore does not enable driver TLS by default. An
-explicit `DB_SSL=true` still enables TLS; unset it or set `DB_SSL=false` if the
-internal MySQL server reports that it does not support secure connections.
-Do not disable TLS for a public or otherwise untrusted database connection.
+That private hostname therefore never enables driver TLS, even if a stale
+`DB_SSL=true` variable is set. The connection code also removes TLS query
+options from a Railway-private MySQL URL. For external database hosts,
+`DB_SSL=true` enables TLS and TLS remains enabled by default for host-based
+connections. Do not disable TLS for a public or otherwise untrusted database
+connection.
 
 ## Admin account
 
