@@ -8,12 +8,8 @@ import 'providers/app_settings_provider.dart';
 import 'services/api_service.dart';
 import 'services/background_notification_worker.dart';
 import 'screens/login_screen.dart';
-import 'screens/doctor_dashboard.dart';
-import 'screens/labo_dashboard.dart';
-import 'screens/pharmacy_dashboard.dart';
-import 'screens/patient_dashboard.dart';
-import 'screens/admin_dashboard.dart';
 import 'screens/splash_screen.dart';
+import 'screens/_dashboard_router.dart';
 import 'theme/medi_go_theme.dart';
 
 void main() async {
@@ -64,7 +60,7 @@ class MedicalApp extends StatelessWidget {
           MediGoTheme.buildTheme().textTheme,
         ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.transparent,
+          backgroundColor: MediGoTheme.cardSurface,
           foregroundColor: MediGoTheme.darkNavy,
           elevation: 0,
           centerTitle: false,
@@ -81,11 +77,14 @@ class MedicalApp extends StatelessWidget {
       home: const SplashScreen(),
       routes: {
         '/login': (_) => const LoginScreen(),
-        '/doctor': (_) => const DoctorDashboard(),
-        '/labo': (_) => const LaboDashboard(),
-        '/pharmacy': (_) => const PharmacyDashboard(),
-        '/patient': (_) => const PatientDashboard(),
-        '/admin': (_) => const AdminDashboard(),
+        '/doctor': (context) =>
+            DashboardRouter.screenForRole(context, 'doctor'),
+        '/labo': (context) => DashboardRouter.screenForRole(context, 'labo'),
+        '/pharmacy': (context) =>
+            DashboardRouter.screenForRole(context, 'pharmacy'),
+        '/patient': (context) =>
+            DashboardRouter.screenForRole(context, 'patient'),
+        '/admin': (context) => DashboardRouter.screenForRole(context, 'admin'),
       },
     );
   }

@@ -6,7 +6,7 @@ class AppSettingsProvider extends ChangeNotifier {
   static const _localeKey = 'app_locale';
 
   ThemeMode _themeMode = ThemeMode.light;
-  Locale _locale = const Locale('ar');
+  Locale _locale = const Locale('fr');
 
   ThemeMode get themeMode => _themeMode;
   Locale get locale => _locale;

@@ -27,6 +27,7 @@ class DashboardShell extends StatelessWidget {
     this.extraActions,
     this.onRefresh,
     this.tabBar,
+    this.toolbarHeight,
     required this.body,
     this.fab,
     this.placement,
@@ -34,27 +35,39 @@ class DashboardShell extends StatelessWidget {
 
   /// Main dashboard title shown in the app bar.
   final String title;
+
   /// Optional subtitle shown under the title (e.g. the user's role).
   final String? subtitle;
+
   /// Optional custom app-bar actions. When provided, replaces the default
   /// profile/refresh/logout popup (the notification bell is always shown).
   final List<Widget>? actions;
+
   /// Extra app-bar actions appended after the standard ones.
   final List<Widget>? extraActions;
+
   /// Optional refresh callback wired to the default profile/refresh/logout popup.
   final VoidCallback? onRefresh;
+
   /// Optional tab bar shown under the app bar.
   final PreferredSizeWidget? tabBar;
+
+  /// Optional toolbar height for dashboards whose app-bar content needs more
+  /// room. Null keeps the Material default used by the other role dashboards.
+  final double? toolbarHeight;
+
   /// The dashboard body content.
   final Widget body;
+
   /// Optional floating action button.
   final Widget? fab;
+
   /// Advertisement placement key (e.g. 'patient_dashboard').
   final String? placement;
 
   Future<void> _logout(BuildContext context) async {
     await context.read<AuthProvider>().logout();
-    // ignore: use_build_context_synchronously
+    if (!context.mounted) return;
     Navigator.pushAndRemoveUntil<void>(
       context,
       MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
@@ -125,65 +138,100 @@ class DashboardShell extends StatelessWidget {
       if (extraActions != null) ...extraActions!,
     ];
 
-    return Scaffold(
-      backgroundColor: MediGoTheme.backgroundStart,
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: MediGoTheme.darkNavy,
-                letterSpacing: -0.4,
-              ),
-            ),
-            if (subtitle != null && subtitle!.isNotEmpty)
+    return SafeArea(
+      bottom: false,
+      child: Scaffold(
+        backgroundColor: MediGoTheme.backgroundStart,
+        appBar: AppBar(
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
               Text(
-                subtitle!,
+                title,
                 style: const TextStyle(
-                  fontSize: 12,
-                  color: MediGoTheme.secondaryGrey,
-                  fontWeight: FontWeight.w500,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: MediGoTheme.darkNavy,
+                  letterSpacing: -0.4,
                 ),
               ),
-          ],
+              if (subtitle != null && subtitle!.isNotEmpty)
+                Text(
+                  subtitle!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: MediGoTheme.secondaryGrey,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+            ],
+          ),
+          backgroundColor: MediGoTheme.cardSurface,
+          foregroundColor: MediGoTheme.darkNavy,
+          elevation: 0,
+          centerTitle: false,
+          iconTheme: const IconThemeData(color: MediGoTheme.darkNavy),
+          toolbarHeight: toolbarHeight,
+          bottom: tabBar,
+          actions: standardActions,
         ),
-        backgroundColor: MediGoTheme.cardSurface,
-        foregroundColor: MediGoTheme.darkNavy,
-        elevation: 0,
-        centerTitle: false,
-        iconTheme: const IconThemeData(color: MediGoTheme.darkNavy),
-        bottom: tabBar,
-        actions: standardActions,
-      ),
-      body: SafeArea(
-        top: false,
-        bottom: false,
-        child: Padding(
-          padding: EdgeInsets.only(bottom: placement == null ? 16 : kDashboardAdStripHeight + 16),
-          child: body,
+        body: SafeArea(
+          top: false,
+          bottom: false,
+          child: Padding(
+            padding: EdgeInsets.only(
+              bottom: placement == null ? 16 : kDashboardAdStripHeight + 16,
+            ),
+            child: body,
+          ),
         ),
+        bottomNavigationBar: placement == null
+            ? null
+            : AdvertisementStrip(placement: placement!),
+        floatingActionButton: fab,
       ),
-      bottomNavigationBar:
-          placement == null
-              ? null
-              : AdvertisementStrip(placement: placement!),
-      floatingActionButton: fab,
     );
   }
 }
 
+class DashboardTabBar extends StatelessWidget implements PreferredSizeWidget {
+  const DashboardTabBar({
+    super.key,
+    required this.controller,
+    required this.tabs,
+  });
+
+  final TabController controller;
+  final List<Widget> tabs;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(80);
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: preferredSize.height,
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+    color: MediGoTheme.cardSurface,
+    child: TabBar(
+      controller: controller,
+      isScrollable: true,
+      indicator: BoxDecoration(
+        color: MediGoTheme.darkNavy,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      indicatorPadding: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
+      labelColor: MediGoTheme.cardSurface,
+      unselectedLabelColor: MediGoTheme.secondaryGrey,
+      labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+      tabs: tabs,
+    ),
+  );
+}
+
 /// Consistent empty state used across dashboards.
 class MediEmpty extends StatelessWidget {
-  const MediEmpty({
-    super.key,
-    required this.icon,
-    required this.message,
-  });
+  const MediEmpty({super.key, required this.icon, required this.message});
 
   final IconData icon;
   final String message;
@@ -212,10 +260,7 @@ class MediEmpty extends StatelessWidget {
 
 /// Consistent status chip used across dashboards.
 class MediStatusChip extends StatelessWidget {
-  const MediStatusChip({
-    super.key,
-    required this.status,
-  });
+  const MediStatusChip({super.key, required this.status});
 
   final String status;
 
@@ -223,9 +268,9 @@ class MediStatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final (label, color) = switch (status.toLowerCase()) {
       'completed' || 'dispensed' => (
-          AppTexts.of(context, 'completed'),
-          MediGoTheme.successGreen,
-        ),
+        AppTexts.of(context, 'completed'),
+        MediGoTheme.successGreen,
+      ),
       'pending' => (AppTexts.of(context, 'pending'), MediGoTheme.warningOrange),
       _ => (status, MediGoTheme.secondaryGrey),
     };
@@ -249,11 +294,7 @@ class MediStatusChip extends StatelessWidget {
 
 /// Consistent section header used across dashboards.
 class MediSectionHeader extends StatelessWidget {
-  const MediSectionHeader({
-    super.key,
-    required this.title,
-    this.action,
-  });
+  const MediSectionHeader({super.key, required this.title, this.action});
 
   final String title;
   final VoidCallback? action;
@@ -327,7 +368,9 @@ class MediStatChip extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.75),
+                color: Theme.of(
+                  context,
+                ).colorScheme.onPrimary.withValues(alpha: 0.75),
                 fontSize: 11,
               ),
             ),
@@ -337,4 +380,3 @@ class MediStatChip extends StatelessWidget {
     );
   }
 }
-

@@ -6,10 +6,9 @@ import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../theme/medi_go_theme.dart';
 import '../widgets/dashboard_shell.dart';
-import 'login_screen.dart';
-import 'profile_screen.dart';
 import 'doctor_search_screen.dart';
-import 'symptom_consultation_screen.dart';
+import 'medical_assistant_screen.dart';
+import 'medical_document_screen.dart';
 
 class PatientDashboard extends StatefulWidget {
   const PatientDashboard({super.key});
@@ -31,7 +30,7 @@ class _PatientDashboardState extends State<PatientDashboard>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 3, vsync: this);
+    _tabs = TabController(length: 3, vsync: this, initialIndex: 1);
     _fetchAll();
   }
 
@@ -103,42 +102,6 @@ class _PatientDashboardState extends State<PatientDashboard>
     );
   }
 
-  Future<void> _logout() async {
-    await context.read<AuthProvider>().logout();
-    if (!mounted) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (_) => false,
-    );
-  }
-
-  void _onDashboardActionSelected(String action) {
-    switch (action) {
-      case 'consultation':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const SymptomConsultationScreen()),
-        );
-        break;
-      case 'doctors':
-        _openDoctorSearch();
-        break;
-      case 'profile':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ProfileScreen()),
-        );
-        break;
-      case 'refresh':
-        _fetchAll();
-        break;
-      case 'logout':
-        _logout();
-        break;
-    }
-  }
-
   void _openDoctorSearch() {
     Navigator.push(
       context,
@@ -150,26 +113,17 @@ class _PatientDashboardState extends State<PatientDashboard>
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     String t(String key) => AppTexts.of(context, key);
+    final patient = _overview?['patient'] as Map<String, dynamic>? ?? {};
+    final patientName =
+        '${patient['firstname'] ?? ''} ${patient['lastname'] ?? ''}'.trim();
+    final displayName = patientName.isNotEmpty
+        ? patientName
+        : (auth.name ?? '');
     return DashboardShell(
       title: t('patient_dashboard'),
-      subtitle: (auth.name ?? '').isNotEmpty ? auth.name! : t('patient'),
       placement: 'patient_dashboard',
-      actions: [
-        PopupMenuButton<String>(
-          tooltip: t('dashboard_actions'),
-          onSelected: _onDashboardActionSelected,
-          itemBuilder: (_) => [
-            _dashboardAction(
-              'consultation',
-              Icons.monitor_heart_outlined,
-              t('symptom_consultation'),
-            ),
-            _dashboardAction('profile', Icons.person_outline, t('profile')),
-            _dashboardAction('refresh', Icons.refresh, t('refresh')),
-            _dashboardAction('logout', Icons.logout, t('logout')),
-          ],
-        ),
-      ],
+      actions: null,
+      toolbarHeight: 64,
       extraActions: [
         IconButton(
           tooltip: t('find_doctor'),
@@ -177,58 +131,125 @@ class _PatientDashboardState extends State<PatientDashboard>
           icon: const Icon(Icons.search),
         ),
       ],
-      tabBar: PreferredSize(
-        preferredSize: const Size.fromHeight(52),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          color: MediGoTheme.cardSurface,
-          child: TabBar(
-            controller: _tabs,
-            isScrollable: false,
-            indicator: BoxDecoration(
-              color: MediGoTheme.darkNavy,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            labelColor: MediGoTheme.cardSurface,
-            unselectedLabelColor: MediGoTheme.secondaryGrey,
-            labelStyle: const TextStyle(fontWeight: FontWeight.w700),
-            tabs: [
-              Tab(icon: const Icon(Icons.biotech), text: t('my_analyses')),
-              Tab(
-                icon: const Icon(Icons.receipt_long),
-                text: t('prescription'),
-              ),
-              Tab(
-                icon: const Icon(Icons.monitor_heart),
-                text: t('my_progress'),
-              ),
-            ],
-          ),
-        ),
-      ),
-      body: TabBarView(
+      tabBar: DashboardTabBar(
         controller: _tabs,
-        children: [
-          _buildAnalysisTab(),
-          _buildPrescriptionTab(),
-          _buildProgressTab(),
+        tabs: [
+          Tab(
+            icon: const Icon(Icons.biotech, size: 20),
+            text: t('my_analyses'),
+          ),
+          Tab(
+            icon: const Icon(Icons.receipt_long, size: 20),
+            text: t('prescription'),
+          ),
+          Tab(
+            icon: const Icon(Icons.monitor_heart, size: 20),
+            text: t('my_progress'),
+          ),
         ],
       ),
-    );
-  }
-
-  PopupMenuItem<String> _dashboardAction(
-    String value,
-    IconData icon,
-    String label,
-  ) {
-    return PopupMenuItem<String>(
-      value: value,
-      child: Row(
+      body: Column(
         children: [
-          Icon(icon, color: MediGoTheme.darkNavy),
-          const SizedBox(width: 12),
-          Flexible(child: Text(label)),
+          if (displayName.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      const CircleAvatar(
+                        backgroundColor: MediGoTheme.primaryBlue,
+                        child: Icon(
+                          Icons.person_outline,
+                          color: MediGoTheme.cardSurface,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          displayName,
+                          softWrap: true,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: Card(
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const MedicalAssistantScreen(),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: MediGoTheme.backgroundEnd,
+                          borderRadius: BorderRadius.circular(13),
+                        ),
+                        child: const Icon(
+                          Icons.support_agent_rounded,
+                          color: MediGoTheme.primaryBlue,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              t('medical_assistant'),
+                              style: const TextStyle(
+                                color: MediGoTheme.darkNavy,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              t('medical_assistant_subtitle'),
+                              style: const TextStyle(
+                                color: MediGoTheme.secondaryGrey,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        color: MediGoTheme.primaryBlue,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabs,
+              children: [
+                _buildAnalysisTab(),
+                _buildPrescriptionTab(),
+                _buildProgressTab(),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -253,7 +274,9 @@ class _PatientDashboardState extends State<PatientDashboard>
         itemBuilder: (_, i) {
           final a = _analysisRequests[i];
           final status = a['status']?.toString() ?? 'pending';
-          final hasResult = a['result_url'] != null;
+          final resultUrl = a['result_url']?.toString() ?? '';
+          final hasResult = resultUrl.isNotEmpty;
+          final requestFileUrl = a['file_url']?.toString() ?? '';
           return Card(
             elevation: 1,
             shape: RoundedRectangleBorder(
@@ -306,29 +329,43 @@ class _PatientDashboardState extends State<PatientDashboard>
                       _statusChip(status),
                     ],
                   ),
-                  if (hasResult) ...[
-                    const Divider(height: 20),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.attach_file,
-                          size: 16,
-                          color: MediGoTheme.primaryBlue,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            a['result_url'].toString(),
-                            style: const TextStyle(
-                              color: MediGoTheme.primaryBlue,
-                              fontSize: 12,
-                              decoration: TextDecoration.underline,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                  if ((a['labo_name'] ?? '').toString().isNotEmpty ||
+                      (a['notes'] ?? '').toString().isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    if ((a['labo_name'] ?? '').toString().isNotEmpty)
+                      _infoRow(
+                        Icons.science_outlined,
+                        '${AppTexts.of(context, 'labo')}: ${a['labo_name']}',
+                      ),
+                    if ((a['notes'] ?? '').toString().isNotEmpty)
+                      _infoRow(Icons.notes_outlined, a['notes'].toString()),
                   ],
+                  if (requestFileUrl.isNotEmpty || resultUrl.isNotEmpty) ...[
+                    const Divider(height: 20),
+                    if (requestFileUrl.isNotEmpty)
+                      _documentButton(
+                        path: requestFileUrl,
+                        title:
+                            '${AppTexts.of(context, 'attached_document')} #${a['id']}',
+                        type: AppTexts.of(context, 'analysis_request'),
+                        date: _fmtDate(a['created_at']?.toString()),
+                      ),
+                    if (resultUrl.isNotEmpty)
+                      _documentButton(
+                        path: resultUrl,
+                        title:
+                            '${AppTexts.of(context, 'analysis_result')} #${a['id']}',
+                        type: AppTexts.of(context, 'my_analyses'),
+                        date: _fmtDate(
+                          a['result_uploaded_at']?.toString() ??
+                              a['created_at']?.toString(),
+                        ),
+                      ),
+                  ] else
+                    _infoRow(
+                      Icons.info_outline,
+                      AppTexts.of(context, 'no_document_attached'),
+                    ),
                 ],
               ),
             ),
@@ -357,6 +394,7 @@ class _PatientDashboardState extends State<PatientDashboard>
         itemBuilder: (_, i) {
           final p = _prescriptions[i];
           final status = p['status']?.toString() ?? 'pending';
+          final fileUrl = p['file_url']?.toString() ?? '';
           return Card(
             elevation: 1,
             shape: RoundedRectangleBorder(
@@ -407,29 +445,27 @@ class _PatientDashboardState extends State<PatientDashboard>
                       _statusChip(status),
                     ],
                   ),
-                  if (p['file_url'] != null) ...[
-                    const Divider(height: 20),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.attach_file,
-                          size: 16,
-                          color: MediGoTheme.primaryBlue,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            p['file_url'].toString(),
-                            style: const TextStyle(
-                              color: MediGoTheme.primaryBlue,
-                              fontSize: 12,
-                              decoration: TextDecoration.underline,
-                            ),
-                          ),
-                        ),
-                      ],
+                  if ((p['pharmacy_name'] ?? '').toString().isNotEmpty)
+                    _infoRow(
+                      Icons.local_pharmacy_outlined,
+                      '${AppTexts.of(context, 'pharmacy')}: ${p['pharmacy_name']}',
                     ),
-                  ],
+                  if ((p['notes'] ?? '').toString().isNotEmpty)
+                    _infoRow(Icons.medication_outlined, p['notes'].toString()),
+                  if (fileUrl.isNotEmpty) ...[
+                    const Divider(height: 20),
+                    _documentButton(
+                      path: fileUrl,
+                      title:
+                          '${AppTexts.of(context, 'prescription')} #${p['id']}',
+                      type: AppTexts.of(context, 'prescription'),
+                      date: _fmtDate(p['created_at']?.toString()),
+                    ),
+                  ] else
+                    _infoRow(
+                      Icons.info_outline,
+                      AppTexts.of(context, 'no_document_attached'),
+                    ),
                 ],
               ),
             ),
@@ -459,6 +495,16 @@ class _PatientDashboardState extends State<PatientDashboard>
       _overview?['timeline'] ?? [],
     );
     final level = progression['level']?.toString() ?? 'monitoring';
+    final progressionLabel = switch (level) {
+      'good' => AppTexts.of(context, 'progress_good'),
+      'attention' => AppTexts.of(context, 'progress_attention'),
+      _ => AppTexts.of(context, 'under_monitoring'),
+    };
+    final progressionMessage = switch (level) {
+      'good' => AppTexts.of(context, 'progress_good_message'),
+      'attention' => AppTexts.of(context, 'progress_attention_message'),
+      _ => AppTexts.of(context, 'progress_monitoring_message'),
+    };
 
     return RefreshIndicator(
       onRefresh: _fetchOverview,
@@ -478,11 +524,10 @@ class _PatientDashboardState extends State<PatientDashboard>
                 ),
               ),
               title: Text(
-                progression['label']?.toString() ??
-                    AppTexts.of(context, 'under_monitoring'),
+                progressionLabel,
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              subtitle: Text(progression['message']?.toString() ?? ''),
+              subtitle: Text(progressionMessage),
             ),
           ),
           const SizedBox(height: 10),
@@ -548,8 +593,8 @@ class _PatientDashboardState extends State<PatientDashboard>
                             ? Icons.biotech_outlined
                             : Icons.medication_outlined,
                       ),
-                      title: Text(item['title']?.toString() ?? ''),
-                      subtitle: Text(item['subtitle']?.toString() ?? ''),
+                      title: Text(_timelineTitle(item)),
+                      subtitle: Text(_timelineSubtitle(item)),
                       trailing: Text(
                         _fmtDate(item['date']?.toString()),
                         style: const TextStyle(
@@ -579,6 +624,101 @@ class _PatientDashboardState extends State<PatientDashboard>
       ],
     ),
   );
+
+  Widget _infoRow(IconData icon, String text) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 2),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: MediGoTheme.secondaryGrey),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            softWrap: true,
+            style: const TextStyle(
+              fontSize: 13,
+              color: MediGoTheme.secondaryGrey,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _documentButton({
+    required String path,
+    required String title,
+    required String type,
+    required String date,
+  }) => Card(
+    margin: const EdgeInsets.symmetric(vertical: 4),
+    child: ListTile(
+      leading: const Icon(
+        Icons.description_outlined,
+        color: MediGoTheme.primaryBlue,
+      ),
+      title: Text(title),
+      subtitle: Text('$type · $date'),
+      trailing: const Icon(Icons.open_in_new, color: MediGoTheme.primaryBlue),
+      onTap: () =>
+          _openDocument(path: path, title: title, type: type, date: date),
+    ),
+  );
+
+  String _timelineTitle(Map<String, dynamic> item) {
+    final title = item['title']?.toString();
+    return switch (title) {
+      'Analysis completed' => AppTexts.of(context, 'analysis_completed'),
+      'Analysis requested' => AppTexts.of(context, 'analysis_requested'),
+      'Medication ready' => AppTexts.of(context, 'medication_ready'),
+      'Medication pending' => AppTexts.of(context, 'medication_pending'),
+      _ => title ?? '',
+    };
+  }
+
+  String _timelineSubtitle(Map<String, dynamic> item) {
+    final subtitle = item['subtitle']?.toString();
+    return switch (subtitle) {
+      'Result available' => AppTexts.of(context, 'analysis_result_available'),
+      'Waiting for laboratory result' => AppTexts.of(
+        context,
+        'waiting_laboratory_result',
+      ),
+      'Pharmacy has marked it ready' => AppTexts.of(
+        context,
+        'pharmacy_marked_ready',
+      ),
+      'Pharmacy is preparing your medication' => AppTexts.of(
+        context,
+        'pharmacy_preparing',
+      ),
+      _ => subtitle ?? '',
+    };
+  }
+
+  Future<void> _openDocument({
+    required String path,
+    required String title,
+    required String type,
+    required String date,
+  }) async {
+    if (path.trim().isEmpty) {
+      _showError(AppTexts.of(context, 'document_url_invalid'));
+      return;
+    }
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => MedicalDocumentScreen(
+          title: title,
+          type: type,
+          date: date,
+          fileUrl: path,
+        ),
+      ),
+    );
+  }
 
   Widget _statusChip(String status) {
     Color color;
@@ -644,7 +784,7 @@ class _PatientDashboardState extends State<PatientDashboard>
     if (iso == null) return '';
     try {
       final dt = DateTime.parse(iso).toLocal();
-      return '${dt.day}/${dt.month}/${dt.year}';
+      return MaterialLocalizations.of(context).formatMediumDate(dt);
     } catch (_) {
       return iso;
     }

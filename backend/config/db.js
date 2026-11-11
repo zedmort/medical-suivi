@@ -23,12 +23,15 @@ const resolveDbConfig = () => {
 
 const poolConfig = resolveDbConfig();
 
-const isLocalHost = (host) => {
-  const h = (host || "").toString().toLowerCase();
-  return h === "localhost" || h === "127.0.0.1" || h === "::1";
+const isPrivateHost = (host) => {
+  const hostname = (host || "").toString().toLowerCase();
+  return hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "::1" ||
+    hostname.endsWith(".railway.internal");
 };
 
-if (process.env.DB_SSL === "true" || (process.env.DB_SSL !== "false" && !process.env.DATABASE_URL && !process.env.MYSQL_URL && !isLocalHost(process.env.DB_HOST || process.env.MYSQLHOST))) {
+if (process.env.DB_SSL === "true" || (process.env.DB_SSL !== "false" && !process.env.DATABASE_URL && !process.env.MYSQL_URL && !isPrivateHost(process.env.DB_HOST || process.env.MYSQLHOST))) {
   poolConfig.ssl = { rejectUnauthorized: false };
 }
 if (process.env.DB_SSL === "true" && (process.env.DATABASE_URL || process.env.MYSQL_URL)) {

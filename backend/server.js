@@ -25,6 +25,8 @@ const medicalRoutes      = require("./routes/medical");
 const adminRoutes        = require("./routes/admin");
 const advertisementRoutes = require("./routes/advertisements");
 const consultationRoutes = require("./routes/consultations");
+const subscriptionRoutes = require("./routes/subscriptions");
+const medicalAssistantRoutes = require("./routes/medicalAssistant");
 const upload             = require("./config/multer");
 const verifyToken        = require("./middleware/verifyToken");
 
@@ -38,6 +40,8 @@ app.use("/api/medical",      medicalRoutes);
 app.use("/api/admin",        adminRoutes);
 app.use("/api/advertisements", advertisementRoutes);
 app.use("/api/consultations", consultationRoutes);
+app.use("/api/subscriptions", subscriptionRoutes);
+app.use("/api/medical-assistant", medicalAssistantRoutes);
 
 // General file upload endpoint — POST /api/upload
 app.post("/api/upload", verifyToken, upload.single("file"), (req, res) => {

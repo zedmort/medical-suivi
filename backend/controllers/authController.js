@@ -196,6 +196,9 @@ const register = async (req, res) => {
     });
   } catch (err) {
     if (connection && transactionStarted) await connection.rollback();
+    if (err.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({ message: "Email already registered." });
+    }
     console.error("Register error:", err);
     return res.status(500).json({
       message: "Server error during registration.",
@@ -214,7 +217,14 @@ const login = async (req, res) => {
   }
 
   try {
-    const [rows] = await db.execute("SELECT * FROM users WHERE email = ?", [email]);
+    if (typeof email !== "string") {
+      return res.status(400).json({ message: "A valid email address is required." });
+    }
+    const normalizedEmail = email.trim().toLowerCase();
+    const [rows] = await db.execute(
+      "SELECT * FROM users WHERE email = ?",
+      [normalizedEmail],
+    );
     if (rows.length === 0) {
       return res.status(401).json({ message: "Invalid credentials." });
     }

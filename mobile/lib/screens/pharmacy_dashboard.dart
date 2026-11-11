@@ -6,6 +6,7 @@ import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../theme/medi_go_theme.dart';
 import '../widgets/dashboard_shell.dart';
+import 'medical_document_screen.dart';
 
 class PharmacyDashboard extends StatefulWidget {
   const PharmacyDashboard({super.key});
@@ -75,134 +76,171 @@ class _PharmacyDashboardState extends State<PharmacyDashboard> {
     );
   }
 
-
   String _fmtDate(String? iso) {
     if (iso == null) return '–';
     try {
       final dt = DateTime.parse(iso).toLocal();
-      return '${dt.day}/${dt.month}/${dt.year}';
+      return MaterialLocalizations.of(context).formatMediumDate(dt);
     } catch (_) {
       return iso;
     }
   }
 
+  Future<void> _openDocument(Map<String, dynamic> prescription) async {
+    final path = prescription['file_url']?.toString().trim() ?? '';
+    if (path.isEmpty) {
+      _showError(AppTexts.of(context, 'document_url_invalid'));
+      return;
+    }
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => MedicalDocumentScreen(
+          title:
+              '${AppTexts.of(context, 'prescription')} #${prescription['id']}',
+          type: AppTexts.of(context, 'prescription'),
+          date: _fmtDate(prescription['created_at']?.toString()),
+          fileUrl: path,
+        ),
+      ),
+    );
+  }
+
   void _showDetail(Map<String, dynamic> p) {
     final status = p['status']?.toString() ?? 'pending';
+    final fileUrl = p['file_url']?.toString() ?? '';
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: MediGoTheme.borderSoft,
-                  borderRadius: BorderRadius.circular(2),
+      builder: (_) => SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: MediGoTheme.borderSoft,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '${p['firstname'] ?? ''} ${p['lastname'] ?? ''}',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            _detailRow(
-              Icons.medical_information_outlined,
-              'Maladie',
-              diseaseLabel(p['disease']?.toString() ?? '–', context),
-            ),
-            _detailRow(
-              Icons.location_on_outlined,
-              AppTexts.of(context, 'delivery_address'),
-              p['address']?.toString() ?? '–',
-            ),
-            if ((p['phone'] ?? '').toString().isNotEmpty)
+              const SizedBox(height: 16),
+              Text(
+                '${p['firstname'] ?? ''} ${p['lastname'] ?? ''}',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
               _detailRow(
-                Icons.phone_outlined,
-                AppTexts.of(context, 'phone_optional'),
-                p['phone'].toString(),
+                Icons.medical_information_outlined,
+                AppTexts.of(context, 'disease'),
+                diseaseLabel(p['disease']?.toString() ?? '–', context),
               ),
-            if ((p['notes'] ?? '').toString().isNotEmpty)
               _detailRow(
-                Icons.medication_outlined,
-                AppTexts.of(context, 'medications'),
-                p['notes'].toString(),
+                Icons.location_on_outlined,
+                AppTexts.of(context, 'delivery_address'),
+                p['address']?.toString() ?? '–',
               ),
-            _detailRow(
-              Icons.person_outline,
-              AppTexts.of(context, 'doctor'),
-              p['doctor_name']?.toString() ?? '–',
-            ),
-            _detailRow(
-              Icons.calendar_today,
-              AppTexts.of(context, 'date'),
-              _fmtDate(p['created_at']?.toString()),
-            ),
-            _detailRow(
-              Icons.info_outline,
-              AppTexts.of(context, 'status'),
-              status == 'dispensed'
-                  ? AppTexts.of(context, 'dispensed')
-                  : AppTexts.of(context, 'pending'),
-            ),
-            const SizedBox(height: 24),
-            if (status == 'pending')
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: MediGoTheme.successGreen,
-                    foregroundColor: MediGoTheme.cardSurface,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: const Icon(Icons.local_shipping),
-                  label: Text(
-                    AppTexts.of(context, 'mark_delivered'),
-                    style: const TextStyle(fontSize: 15),
-                  ),
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _updateStatus(p['id'] as int, 'dispensed');
-                  },
+              if ((p['phone'] ?? '').toString().isNotEmpty)
+                _detailRow(
+                  Icons.phone_outlined,
+                  AppTexts.of(context, 'phone_optional'),
+                  p['phone'].toString(),
                 ),
-              )
-            else
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: MediGoTheme.warningOrange,
-                    side: const BorderSide(color: MediGoTheme.warningOrange),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: const Icon(Icons.undo),
-                  label: Text(
-                    AppTexts.of(context, 'back_to_pending'),
-                    style: const TextStyle(fontSize: 15),
-                  ),
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _updateStatus(p['id'] as int, 'pending');
-                  },
+              if ((p['notes'] ?? '').toString().isNotEmpty)
+                _detailRow(
+                  Icons.medication_outlined,
+                  AppTexts.of(context, 'medications'),
+                  p['notes'].toString(),
                 ),
+              _detailRow(
+                Icons.person_outline,
+                AppTexts.of(context, 'doctor'),
+                p['doctor_name']?.toString() ?? '–',
               ),
-          ],
+              _detailRow(
+                Icons.calendar_today,
+                AppTexts.of(context, 'date'),
+                _fmtDate(p['created_at']?.toString()),
+              ),
+              _detailRow(
+                Icons.info_outline,
+                AppTexts.of(context, 'status'),
+                status == 'dispensed'
+                    ? AppTexts.of(context, 'dispensed')
+                    : AppTexts.of(context, 'pending'),
+              ),
+              if (fileUrl.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _openDocument(p),
+                    icon: const Icon(Icons.picture_as_pdf_outlined),
+                    label: Text(AppTexts.of(context, 'view_prescription')),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
+              if (status == 'pending')
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: MediGoTheme.successGreen,
+                      foregroundColor: MediGoTheme.cardSurface,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    icon: const Icon(Icons.local_shipping),
+                    label: Text(
+                      AppTexts.of(context, 'mark_delivered'),
+                      style: const TextStyle(fontSize: 15),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _updateStatus(p['id'] as int, 'dispensed');
+                    },
+                  ),
+                )
+              else
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: MediGoTheme.warningOrange,
+                      side: const BorderSide(color: MediGoTheme.warningOrange),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    icon: const Icon(Icons.undo),
+                    label: Text(
+                      AppTexts.of(context, 'back_to_pending'),
+                      style: const TextStyle(fontSize: 15),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _updateStatus(p['id'] as int, 'pending');
+                    },
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -215,8 +253,10 @@ class _PharmacyDashboardState extends State<PharmacyDashboard> {
       children: [
         Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
         const SizedBox(width: 10),
-        SizedBox(
-          width: 110,
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.sizeOf(context).width * 0.3,
+          ),
           child: Text(
             label,
             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
@@ -334,6 +374,20 @@ class _PharmacyDashboardState extends State<PharmacyDashboard> {
                 _fmtDate(p['created_at']?.toString()),
                 color: MediGoTheme.secondaryGrey,
               ),
+              if ((p['file_url'] ?? '').toString().isNotEmpty)
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton.icon(
+                    onPressed: () => _openDocument(p),
+                    icon: const Icon(Icons.open_in_new, size: 18),
+                    label: Text(AppTexts.of(context, 'view_prescription')),
+                  ),
+                )
+              else
+                _infoRow(
+                  Icons.info_outline,
+                  AppTexts.of(context, 'no_document_attached'),
+                ),
               if (status == 'pending') ...[
                 const SizedBox(height: 10),
                 SizedBox(

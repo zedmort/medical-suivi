@@ -34,7 +34,7 @@ const {
 } = require("../config/medicalTaxonomy");
 const { findPatientForUser } = require("../utils/patientIdentity");
 const { getDoctors } = require("../controllers/userController");
-const { register } = require("../controllers/authController");
+const { register, login } = require("../controllers/authController");
 
 if (originalDbModule) require.cache[dbPath] = originalDbModule;
 else delete require.cache[dbPath];
@@ -260,6 +260,43 @@ test("doctor registration rejects a specialty outside the two supported areas", 
   );
 
   assert.equal(res.statusCode, 400);
+});
+
+test("login normalizes email casing and surrounding whitespace", async () => {
+  const bcrypt = require("bcrypt");
+  const originalExecute = dbStub.execute;
+  const originalSecret = process.env.JWT_SECRET;
+  process.env.JWT_SECRET = "test-jwt-secret";
+  const passwordHash = await bcrypt.hash("valid-password", 4);
+  let queriedEmail;
+  try {
+    dbStub.execute = async (sql, params) => {
+      assert.match(sql, /WHERE email = \?/);
+      queriedEmail = params[0];
+      return [[{
+        id: 21,
+        name: "Test Doctor",
+        email: "doctor@example.test",
+        role: "doctor",
+        specialty: "diabetology",
+        password_hash: passwordHash,
+      }]];
+    };
+
+    const res = responseRecorder();
+    await login(
+      { body: { email: "  DOCTOR@EXAMPLE.TEST ", password: "valid-password" } },
+      res,
+    );
+
+    assert.equal(queriedEmail, "doctor@example.test");
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.user.email, "doctor@example.test");
+  } finally {
+    dbStub.execute = originalExecute;
+    if (originalSecret === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = originalSecret;
+  }
 });
 
 test("doctor search accepts doctor type filtering for patients", async () => {

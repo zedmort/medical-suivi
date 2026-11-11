@@ -131,7 +131,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) return;
       DashboardRouter.go(context, auth.role);
     } on ApiException catch (e) {
-      _showError(e.message);
+      _showError(
+        e.message == 'email_already_registered_login' ||
+                e.message == 'email_registered_login_retry'
+            ? AppTexts.of(context, e.message)
+            : e.message,
+      );
     } catch (_) {
       _showError(AppTexts.of(context, 'connection_failed'));
     } finally {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../l10n/app_texts.dart';
 import '../services/api_service.dart';
 import '../services/local_notification_service.dart';
 
@@ -53,6 +54,8 @@ class _NotificationBellState extends State<NotificationBell> {
 
   Future<void> _fetch() async {
     try {
+      final fallbackTitle = AppTexts.of(context, 'new_notification');
+      final fallbackBody = AppTexts.of(context, 'new_alert');
       final res = await ApiService.get('/notifications');
       final incoming = List<Map<String, dynamic>>.from(
         res['notifications'] ?? [],
@@ -70,10 +73,10 @@ class _NotificationBellState extends State<NotificationBell> {
             id: id,
             title: (n['title']?.toString().isNotEmpty ?? false)
                 ? n['title'].toString()
-                : 'Nouvelle notification',
+                : fallbackTitle,
             body: (n['body']?.toString().isNotEmpty ?? false)
                 ? n['body'].toString()
-                : 'Vous avez une nouvelle alerte.',
+                : fallbackBody,
           );
         }
       }
@@ -130,7 +133,7 @@ class _NotificationBellState extends State<NotificationBell> {
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      tooltip: 'Notifications',
+      tooltip: AppTexts.of(context, 'notifications'),
       icon: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -203,16 +206,16 @@ class _NotificationSheet extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               child: Row(
                 children: [
-                  const Text(
-                    'Notifications',
+                  Text(
+                    AppTexts.of(context, 'notifications'),
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const Spacer(),
                   if (notifications.any((n) => n['is_read'] == 0))
                     TextButton(
                       onPressed: onMarkAllRead,
-                      child: const Text(
-                        'Tout lire',
+                      child: Text(
+                        AppTexts.of(context, 'mark_all_read'),
                         style: TextStyle(fontSize: 12),
                       ),
                     ),
@@ -233,8 +236,8 @@ class _NotificationSheet extends StatelessWidget {
                             color: Colors.grey.shade300,
                           ),
                           const SizedBox(height: 8),
-                          const Text(
-                            'Aucune notification',
+                          Text(
+                            AppTexts.of(context, 'no_notifications'),
                             style: TextStyle(color: Colors.grey),
                           ),
                         ],
@@ -280,7 +283,7 @@ class _NotificationSheet extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                               ),
                               Text(
-                                _fmtDate(n['created_at']?.toString()),
+                                _fmtDate(context, n['created_at']?.toString()),
                                 style: const TextStyle(
                                   fontSize: 10,
                                   color: Colors.grey,
@@ -333,11 +336,15 @@ class _NotificationSheet extends StatelessWidget {
     }
   }
 
-  String _fmtDate(String? iso) {
+  String _fmtDate(BuildContext context, String? iso) {
     if (iso == null) return '';
     try {
       final dt = DateTime.parse(iso).toLocal();
-      return '${dt.day}/${dt.month}/${dt.year}  ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+      final date = MaterialLocalizations.of(context).formatMediumDate(dt);
+      final time = MaterialLocalizations.of(
+        context,
+      ).formatTimeOfDay(TimeOfDay.fromDateTime(dt));
+      return '$date  $time';
     } catch (_) {
       return iso;
     }

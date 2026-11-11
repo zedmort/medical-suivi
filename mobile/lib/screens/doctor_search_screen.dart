@@ -198,7 +198,7 @@ class _DoctorSearchScreenState extends State<DoctorSearchScreen> {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
-                  value: _doctorType.isEmpty ? null : _doctorType,
+                  initialValue: _doctorType.isEmpty ? null : _doctorType,
                   isExpanded: true,
                   decoration: InputDecoration(
                     labelText: _text('doctor_type'),
@@ -221,7 +221,7 @@ class _DoctorSearchScreenState extends State<DoctorSearchScreen> {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
-                  value: _specialty.isEmpty ? null : _specialty,
+                  initialValue: _specialty.isEmpty ? null : _specialty,
                   isExpanded: true,
                   decoration: InputDecoration(
                     labelText: _text('filter_specialty'),

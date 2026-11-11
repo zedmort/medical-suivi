@@ -176,3 +176,61 @@ CREATE TABLE IF NOT EXISTS advertisements (
   FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
   INDEX idx_ads_active_schedule (is_active, starts_at, expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS professional_subscriptions (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  role ENUM('doctor', 'pharmacy', 'labo') NOT NULL,
+  plan_key VARCHAR(40) NOT NULL,
+  status ENUM('active') NOT NULL DEFAULT 'active',
+  payment_mode ENUM('demo') NOT NULL DEFAULT 'demo',
+  activated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_professional_subscription_user (user_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS medical_chat_conversations (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  patient_id INT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+  INDEX idx_medical_chat_patient_updated (patient_id, updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS medical_chat_messages (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  conversation_id BIGINT NOT NULL,
+  role ENUM('user', 'assistant') NOT NULL,
+  iv BINARY(12) NOT NULL,
+  auth_tag BINARY(16) NOT NULL,
+  ciphertext MEDIUMBLOB NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (conversation_id)
+    REFERENCES medical_chat_conversations(id) ON DELETE CASCADE,
+  INDEX idx_medical_chat_messages_history (conversation_id, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS medical_chat_consultation_requests (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  conversation_id BIGINT NOT NULL,
+  patient_id INT NOT NULL,
+  doctor_id INT NOT NULL,
+  summary_iv BINARY(12),
+  summary_auth_tag BINARY(16),
+  summary_ciphertext MEDIUMBLOB,
+  consented_at TIMESTAMP NULL,
+  status ENUM('requested', 'accepted', 'declined') NOT NULL DEFAULT 'requested',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (conversation_id)
+    REFERENCES medical_chat_conversations(id) ON DELETE CASCADE,
+  FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+  FOREIGN KEY (doctor_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX idx_medical_chat_doctor_requests (doctor_id, status, created_at),
+  INDEX idx_medical_chat_patient_requests (patient_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

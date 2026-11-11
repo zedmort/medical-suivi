@@ -12,7 +12,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ApiException implements Exception {
   final String message;
   final int statusCode;
-  const ApiException(this.message, this.statusCode);
+  final String? code;
+  const ApiException(this.message, this.statusCode, {this.code});
   @override
   String toString() => message;
 }
@@ -22,16 +23,17 @@ class ApiException implements Exception {
 // ─────────────────────────────────────────────────────────────────────────────
 class ApiService {
   /// Override with:
-  /// `flutter run --dart-define=API_BASE_URL=http://<HOST_IP>:5001/api`
+  /// `flutter run --dart-define=API_BASE_URL=http://<HOST_IP>:5001`
+  /// A trailing `/api` is also accepted.
   /// Android emulator  → `http://10.0.2.2:5001/api`
   /// iOS simulator     → `http://localhost:5001/api`
-  /// Android device on the same Wi-Fi → `http://192.168.100.4:5001/api`
+  /// Android device on the same Wi-Fi → `http://192.168.3.124:5001/api`
   /// Override the LAN address with `--dart-define=API_BASE_URL=...` if it changes.
   static const String _configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: '',
   );
-  static const String _lanBaseUrl = 'http://192.168.100.4:5001/api';
+  static const String _lanBaseUrl = 'http://192.168.3.124:5001/api';
   static String _activeBaseUrl = _initialBaseUrl();
 
   static String get baseUrl => _activeBaseUrl;
@@ -79,19 +81,63 @@ class ApiService {
   }
 
   static String absoluteFileUrl(String urlOrPath) {
-    if (urlOrPath.startsWith('http://') || urlOrPath.startsWith('https://')) {
-      return urlOrPath;
+    final value = urlOrPath.trim();
+    if (value.isEmpty) {
+      throw const FormatException('Document URL is empty.');
     }
+
+    final suppliedUri = Uri.tryParse(value);
+    if (suppliedUri?.hasScheme ?? false) {
+      if ((suppliedUri!.scheme != 'http' && suppliedUri.scheme != 'https') ||
+          suppliedUri.host.isEmpty) {
+        throw const FormatException('Document URL must be a valid HTTP URL.');
+      }
+      return suppliedUri.toString();
+    }
+
     final apiUri = Uri.parse(baseUrl);
-    final normalizedPath = urlOrPath.startsWith('/')
-        ? urlOrPath
-        : '/$urlOrPath';
-    return Uri(
-      scheme: apiUri.scheme,
-      host: apiUri.host,
-      port: apiUri.hasPort ? apiUri.port : null,
-      path: normalizedPath,
-    ).toString();
+    if ((apiUri.scheme != 'http' && apiUri.scheme != 'https') ||
+        apiUri.host.isEmpty) {
+      throw const FormatException('API base URL is invalid.');
+    }
+    final pathUri = Uri.parse(value.startsWith('/') ? value : '/$value');
+    return apiUri
+        .replace(
+          path: pathUri.path,
+          query: pathUri.hasQuery ? pathUri.query : null,
+          fragment: pathUri.hasFragment ? pathUri.fragment : null,
+        )
+        .toString();
+  }
+
+  static Uri apiUri(String baseUrl, String endpoint) {
+    final baseUri = Uri.parse(baseUrl.trim());
+    if ((baseUri.scheme != 'http' && baseUri.scheme != 'https') ||
+        baseUri.host.isEmpty) {
+      throw const FormatException('API base URL must be a valid HTTP URL.');
+    }
+
+    var basePath = baseUri.path.replaceFirst(RegExp(r'/+$'), '');
+    if (basePath.split('/').last != 'api') {
+      basePath = '$basePath/api';
+    }
+
+    final endpointUri = Uri.parse(endpoint.trim());
+    if (endpointUri.hasScheme || endpointUri.hasAuthority) {
+      throw const FormatException('API endpoint must be a relative path.');
+    }
+    var endpointPath = endpointUri.path.replaceFirst(RegExp(r'^/+'), '');
+    if (endpointPath.startsWith('api/')) {
+      endpointPath = endpointPath.substring(4);
+    }
+    if (endpointPath.isEmpty) {
+      throw const FormatException('API endpoint cannot be empty.');
+    }
+    return baseUri.replace(
+      path: '$basePath/$endpointPath',
+      query: endpointUri.hasQuery ? endpointUri.query : null,
+      fragment: endpointUri.hasFragment ? endpointUri.fragment : null,
+    );
   }
 
   // ── Token ──────────────────────────────────────────────────────────────────
@@ -187,8 +233,11 @@ class ApiService {
     }
     if (res.statusCode >= 200 && res.statusCode < 300) return body;
     throw ApiException(
-      body['message'] ?? 'Request failed (${res.statusCode})',
+      body['message'] is String
+          ? body['message'] as String
+          : 'Request failed (${res.statusCode})',
       res.statusCode,
+      code: body['code'] is String ? body['code'] as String : null,
     );
   }
 
@@ -244,10 +293,7 @@ class ApiService {
     try {
       return _requestWithFallback((currentBaseUrl) async {
         return http
-            .get(
-              Uri.parse('$currentBaseUrl$endpoint'),
-              headers: await _headers(),
-            )
+            .get(apiUri(currentBaseUrl, endpoint), headers: await _headers())
             .timeout(const Duration(seconds: 15));
       });
     } catch (e) {
@@ -260,16 +306,17 @@ class ApiService {
     String endpoint,
     Map<String, dynamic> body, {
     bool auth = true,
+    Duration timeout = const Duration(seconds: 15),
   }) async {
     try {
       return _requestWithFallback((currentBaseUrl) async {
         return http
             .post(
-              Uri.parse('$currentBaseUrl$endpoint'),
+              apiUri(currentBaseUrl, endpoint),
               headers: await _headers(auth: auth),
               body: jsonEncode(body),
             )
-            .timeout(const Duration(seconds: 15));
+            .timeout(timeout);
       });
     } catch (e) {
       _networkError(e);
@@ -285,7 +332,7 @@ class ApiService {
       return _requestWithFallback((currentBaseUrl) async {
         return http
             .patch(
-              Uri.parse('$currentBaseUrl$endpoint'),
+              apiUri(currentBaseUrl, endpoint),
               headers: await _headers(),
               body: jsonEncode(body),
             )
@@ -305,7 +352,7 @@ class ApiService {
       return _requestWithFallback((currentBaseUrl) async {
         return http
             .put(
-              Uri.parse('$currentBaseUrl$endpoint'),
+              apiUri(currentBaseUrl, endpoint),
               headers: await _headers(),
               body: jsonEncode(body),
             )
@@ -320,10 +367,7 @@ class ApiService {
     try {
       return _requestWithFallback((currentBaseUrl) async {
         return http
-            .delete(
-              Uri.parse('$currentBaseUrl$endpoint'),
-              headers: await _headers(),
-            )
+            .delete(apiUri(currentBaseUrl, endpoint), headers: await _headers())
             .timeout(const Duration(seconds: 15));
       });
     } catch (e) {
@@ -342,9 +386,11 @@ class ApiService {
         final token = await getToken();
         final request = http.MultipartRequest(
           'POST',
-          Uri.parse('$currentBaseUrl$endpoint'),
+          apiUri(currentBaseUrl, endpoint),
         );
-        if (token != null) request.headers['Authorization'] = 'Bearer $token';
+        if (token != null) {
+          request.headers['Authorization'] = 'Bearer $token';
+        }
         request.fields.addAll(fields);
         request.files.add(await http.MultipartFile.fromPath('file', filePath));
         final streamed = await request.send().timeout(

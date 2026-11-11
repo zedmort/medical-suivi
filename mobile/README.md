@@ -17,7 +17,7 @@ flutter run
 ```
 
 The Android app defaults to the computer's current LAN address,
-`http://192.168.100.4:5001/api`; the backend listens on all network interfaces.
+`http://192.168.3.124:5001/api`; the backend listens on all network interfaces.
 If the computer's address changes, find its Wi-Fi IPv4 address with
 `hostname -I`, then pass it when launching Flutter:
 

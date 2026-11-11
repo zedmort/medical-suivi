@@ -26,6 +26,7 @@ class _DoctorDashboardState extends State<DoctorDashboard>
   List<Map<String, dynamic>> _analyses = [];
   List<Map<String, dynamic>> _prescriptions = [];
   List<Map<String, dynamic>> _consultations = [];
+  List<Map<String, dynamic>> _assistantRequests = [];
   final TextEditingController _patientSearchController =
       TextEditingController();
 
@@ -33,6 +34,7 @@ class _DoctorDashboardState extends State<DoctorDashboard>
   bool _loadingAnalyses = true;
   bool _loadingPrescriptions = true;
   bool _loadingConsultations = true;
+  bool _loadingAssistantRequests = true;
 
   @override
   void initState() {
@@ -54,6 +56,7 @@ class _DoctorDashboardState extends State<DoctorDashboard>
       _fetchAnalyses(),
       _fetchPrescriptions(),
       _fetchConsultations(),
+      _fetchAssistantRequests(),
     ]);
   }
 
@@ -129,6 +132,39 @@ class _DoctorDashboardState extends State<DoctorDashboard>
       _showError(error.toString());
     } finally {
       if (mounted) setState(() => _loadingConsultations = false);
+    }
+  }
+
+  Future<void> _fetchAssistantRequests() async {
+    setState(() => _loadingAssistantRequests = true);
+    try {
+      final response = await ApiService.get(
+        '/medical-assistant/doctor/consultation-requests',
+      );
+      if (!mounted) return;
+      setState(() {
+        _assistantRequests = List<Map<String, dynamic>>.from(
+          response['requests'] ?? [],
+        );
+      });
+    } catch (error) {
+      _showError(error.toString());
+    } finally {
+      if (mounted) setState(() => _loadingAssistantRequests = false);
+    }
+  }
+
+  Future<void> _updateAssistantRequest(int id, String status) async {
+    try {
+      await ApiService.patch(
+        '/medical-assistant/doctor/consultation-requests/$id',
+        {'status': status},
+      );
+      if (!mounted) return;
+      _showSuccess(AppTexts.of(context, 'assistant_request_updated'));
+      await _fetchAssistantRequests();
+    } catch (error) {
+      _showError(error.toString());
     }
   }
 
@@ -820,7 +856,6 @@ class _DoctorDashboardState extends State<DoctorDashboard>
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
@@ -830,16 +865,19 @@ class _DoctorDashboardState extends State<DoctorDashboard>
       subtitle: (auth.name ?? '').isNotEmpty ? 'Dr. ${auth.name!}' : '',
       placement: 'doctor_dashboard',
       onRefresh: _fetchAll,
-      tabBar: TabBar(
+      tabBar: DashboardTabBar(
         controller: _tabs,
-        indicatorColor: MediGoTheme.cardSurface,
-        labelColor: MediGoTheme.cardSurface,
-        unselectedLabelColor: MediGoTheme.cardSurface.withValues(alpha: 0.6),
         tabs: [
           Tab(icon: const Icon(Icons.group), text: t('my_patients')),
           Tab(icon: const Icon(Icons.biotech), text: t('my_analyses')),
-          Tab(icon: const Icon(Icons.receipt_long), text: t('my_prescriptions')),
-          Tab(icon: const Icon(Icons.monitor_heart), text: t('my_consultations')),
+          Tab(
+            icon: const Icon(Icons.receipt_long),
+            text: t('my_prescriptions'),
+          ),
+          Tab(
+            icon: const Icon(Icons.monitor_heart),
+            text: t('my_consultations'),
+          ),
         ],
       ),
       body: TabBarView(
@@ -1499,89 +1537,169 @@ class _DoctorDashboardState extends State<DoctorDashboard>
   }
 
   Widget _buildConsultationTab() {
-    if (_loadingConsultations) {
+    if (_loadingConsultations || _loadingAssistantRequests) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_consultations.isEmpty) {
+    if (_consultations.isEmpty && _assistantRequests.isEmpty) {
       return _empty(
         'Aucune consultation payée assignée.',
         Icons.monitor_heart_outlined,
       );
     }
     return RefreshIndicator(
-      onRefresh: _fetchConsultations,
-      child: ListView.separated(
+      onRefresh: _fetchAll,
+      child: ListView(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
-        itemCount: _consultations.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
-        itemBuilder: (_, index) {
-          final consultation = _consultations[index];
-          final status = consultation['status']?.toString() ?? 'paid';
-          final id = int.tryParse(consultation['id']?.toString() ?? '');
-          return Card(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.monitor_heart_outlined,
-                        color: MediGoTheme.primaryBlue,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '${consultation['firstname'] ?? ''} ${consultation['lastname'] ?? ''}',
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                      _statusChip(status),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  _infoRow(
-                    Icons.notes_outlined,
-                    consultation['symptoms']?.toString() ?? '',
-                  ),
-                  if ((consultation['notes'] ?? '').toString().isNotEmpty)
-                    _infoRow(
-                      Icons.info_outline,
-                      consultation['notes'].toString(),
-                    ),
-                  _infoRow(
-                    Icons.payments_outlined,
-                    '${consultation['amount']} ${consultation['currency']} — DEMO',
-                    color: MediGoTheme.successGreen,
-                  ),
-                  _infoRow(
-                    Icons.calendar_today,
-                    _fmtDate(consultation['created_at']?.toString()),
-                  ),
-                  if (id != null && status != 'completed')
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: OutlinedButton.icon(
-                        onPressed: () => _updateConsultationStatus(
-                          id,
-                          status == 'paid' ? 'in_progress' : 'completed',
-                        ),
-                        icon: Icon(
-                          status == 'paid'
-                              ? Icons.play_arrow
-                              : Icons.check_circle_outline,
-                        ),
-                        label: Text(
-                          status == 'paid' ? 'Prendre en charge' : 'Terminer',
-                        ),
-                      ),
-                    ),
-                ],
+        children: [
+          if (_assistantRequests.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
+              child: Text(
+                AppTexts.of(context, 'assistant_consultation_requests'),
+                style: Theme.of(context).textTheme.titleMedium,
               ),
             ),
-          );
-        },
+            ..._assistantRequests.map(_buildAssistantRequestCard),
+            const SizedBox(height: 12),
+          ],
+          ..._consultations.map((consultation) {
+            final status = consultation['status']?.toString() ?? 'paid';
+            final id = int.tryParse(consultation['id']?.toString() ?? '');
+            return Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.monitor_heart_outlined,
+                          color: MediGoTheme.primaryBlue,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${consultation['firstname'] ?? ''} ${consultation['lastname'] ?? ''}',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        _statusChip(status),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _infoRow(
+                      Icons.notes_outlined,
+                      consultation['symptoms']?.toString() ?? '',
+                    ),
+                    if ((consultation['notes'] ?? '').toString().isNotEmpty)
+                      _infoRow(
+                        Icons.info_outline,
+                        consultation['notes'].toString(),
+                      ),
+                    _infoRow(
+                      Icons.payments_outlined,
+                      '${consultation['amount']} ${consultation['currency']} — DEMO',
+                      color: MediGoTheme.successGreen,
+                    ),
+                    _infoRow(
+                      Icons.calendar_today,
+                      _fmtDate(consultation['created_at']?.toString()),
+                    ),
+                    if (id != null && status != 'completed')
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _updateConsultationStatus(
+                            id,
+                            status == 'paid' ? 'in_progress' : 'completed',
+                          ),
+                          icon: Icon(
+                            status == 'paid'
+                                ? Icons.play_arrow
+                                : Icons.check_circle_outline,
+                          ),
+                          label: Text(
+                            status == 'paid' ? 'Prendre en charge' : 'Terminer',
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssistantRequestCard(Map<String, dynamic> request) {
+    final id = int.tryParse(request['id']?.toString() ?? '');
+    final status = request['status']?.toString() ?? 'requested';
+    final patient = Map<String, dynamic>.from(request['patient'] ?? const {});
+    final summary = request['summary']?.toString();
+    final statusLabel = switch (status) {
+      'accepted' => AppTexts.of(context, 'assistant_request_accepted'),
+      'declined' => AppTexts.of(context, 'assistant_request_declined'),
+      _ => AppTexts.of(context, 'assistant_request_pending'),
+    };
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.support_agent_rounded,
+                  color: MediGoTheme.primaryBlue,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${patient['firstname'] ?? ''} ${patient['lastname'] ?? ''}'
+                        .trim(),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                _statusChip(statusLabel),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              summary?.isNotEmpty == true
+                  ? '${AppTexts.of(context, 'assistant_summary_shared')}:\n$summary'
+                  : AppTexts.of(context, 'assistant_summary_not_shared'),
+              style: const TextStyle(
+                color: MediGoTheme.secondaryGrey,
+                height: 1.4,
+              ),
+            ),
+            if (id != null && status == 'requested') ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                children: [
+                  OutlinedButton(
+                    onPressed: () => _updateAssistantRequest(id, 'declined'),
+                    child: Text(
+                      AppTexts.of(context, 'assistant_decline_request'),
+                    ),
+                  ),
+                  FilledButton(
+                    onPressed: () => _updateAssistantRequest(id, 'accepted'),
+                    child: Text(
+                      AppTexts.of(context, 'assistant_accept_request'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
