@@ -14,7 +14,9 @@ The migration runner creates missing tables, adds profile columns to existing
 tables, extends the user role enum, and seeds the medical taxonomy. It is
 designed to be repeatable and does not clear application data. Do not execute
 `config/migration.sql`; it is a safety notice for the retired destructive
-migration. Back up the database before applying schema changes.
+migration. Back up the database before applying schema changes. Railway's
+start command runs this migration before starting the API, so the Railway
+service must have valid MySQL connection variables configured.
 
 The backend enables MySQL TLS by default for external host-based connections.
 For Railway services in the same project and environment, use the internal
