@@ -22,18 +22,13 @@ class ApiException implements Exception {
 // ApiService
 // ─────────────────────────────────────────────────────────────────────────────
 class ApiService {
-  /// Override with:
-  /// `flutter run --dart-define=API_BASE_URL=http://<HOST_IP>:5001`
-  /// A trailing `/api` is also accepted.
-  /// Android emulator  → `http://10.0.2.2:5001/api`
-  /// iOS simulator     → `http://localhost:5001/api`
-  /// Android device on the same Wi-Fi → `http://192.168.3.124:5001/api`
-  /// Override the LAN address with `--dart-define=API_BASE_URL=...` if it changes.
+  /// Defaults to the production API. Override for local development with:
+  /// `--dart-define=API_BASE_URL=http://<HOST_IP>:5001/api`
+  /// Android emulator → `http://10.0.2.2:5001/api`
   static const String _configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: '',
+    defaultValue: 'https://medical-suivi-api-production.up.railway.app/api',
   );
-  static const String _lanBaseUrl = 'http://192.168.3.124:5001/api';
   static String _activeBaseUrl = _initialBaseUrl();
 
   static String get baseUrl => _activeBaseUrl;
@@ -51,11 +46,8 @@ class ApiService {
   static String _initialBaseUrl() {
     final configured = _configuredBaseUrl.trim();
     if (configured.isNotEmpty) return configured;
-    if (kIsWeb) {
-      return 'http://localhost:5001/api';
-    }
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      return _lanBaseUrl;
+      return 'http://10.0.2.2:5001/api';
     }
     return 'http://localhost:5001/api';
   }

@@ -2,6 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/services/api_service.dart';
 
 void main() {
+  test('default API points to the production Railway service', () {
+    expect(
+      Uri.parse(ApiService.baseUrl).origin,
+      'https://medical-suivi-api-production.up.railway.app',
+    );
+    expect(Uri.parse(ApiService.baseUrl).path, '/api');
+  });
+
   group('ApiService.apiUri', () {
     test('adds the API prefix when the base URL is the server root', () {
       expect(
